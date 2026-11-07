@@ -1,0 +1,9 @@
+.gradle/
+**/build/
+native/target/
+local.properties
+*.jks
+*.keystore
+app/src/main/jniLibs/
+deliverables/
+test-output/

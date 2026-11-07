@@ -1,0 +1,23 @@
+[package]
+name = "doc-reader-native"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+name = "doc_reader"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wordcraft-docx = { path = "../vendor/wordcraft/crates/docx" }
+wordcraft-fonts = { path = "../vendor/wordcraft/crates/fonts" }
+wordcraft-pdf = { path = "../vendor/wordcraft/crates/pdf" }
+jni = "0.21.1"
+
+[patch.crates-io]
+krilla = { git = "https://github.com/storytold/craft-libs", rev = "c5a1cbfb5f9049f9270955caffb5bee5997aebf7" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = "symbols"

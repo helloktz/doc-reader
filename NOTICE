@@ -1,0 +1,20 @@
+doc-reader (文阅)
+
+DOCX parsing, layout and PDF export use selected WordCraft crates.
+WordCraft: https://github.com/storytold/wordcraft
+Copyright (c) 2026 ArtCraft Team and the WordCraft contributors
+MIT OR Apache-2.0. The source is pinned as vendor/wordcraft.
+
+PDF serialization uses craft-pdf and Krilla from storytold/craft-libs.
+https://github.com/storytold/craft-libs
+The pinned upstream Krilla patch is retained by native/Cargo.toml.
+
+Noto Sans CJK SC Regular is copied unmodified from craft-fonts aced413.
+Font upstream: https://github.com/notofonts/noto-cjk
+License: SIL Open Font License 1.1, native/mobile-fonts/OFL.txt.
+
+Full third-party notices, including WordCraft's bundled font notices, ship in
+app/src/main/assets/open-source-licenses.txt and are accessible from the home screen.
+
+The app icon and the sample document are original to this project.
+No WordCraft brand artwork or desktop interface is included.
