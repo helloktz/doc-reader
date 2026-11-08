@@ -18,8 +18,8 @@ public class DocumentIntegrationTest extends Instrumentation {
         Bundle result = new Bundle();
         try {
             testDocxToReadablePdfAndMalformedInput();
-            testHomeAndDemoReading();
-            result.putString("stream", "PASS: JNI conversion, 2-page PDF rendering, malformed input, home/demo, pinch zoom, double-tap reset, activity recreation\n");
+            testMinimalHomeAndReading();
+            result.putString("stream", "PASS: JNI conversion, 2-page PDF rendering, malformed input, minimal home, document reading, pinch zoom, double-tap reset, activity recreation\n");
             finish(Activity.RESULT_OK, result);
         } catch (Throwable error) {
             result.putString("stream", android.util.Log.getStackTraceString(error));
@@ -37,7 +37,7 @@ public class DocumentIntegrationTest extends Instrumentation {
         android.content.Context context = getInstrumentation().getTargetContext();
         File input = new File(context.getCacheDir(), "integration.docx");
         File output = new File(context.getCacheDir(), "integration.pdf");
-        try (InputStream source = context.getAssets().open("sample.docx"); OutputStream target = new FileOutputStream(input)) {
+        try (InputStream source = getContext().getAssets().open("sample.docx"); OutputStream target = new FileOutputStream(input)) {
             source.transferTo(target);
         }
         assertNull(NativeBridge.INSTANCE.convert(input.getAbsolutePath(), output.getAbsolutePath()));
@@ -63,13 +63,18 @@ public class DocumentIntegrationTest extends Instrumentation {
         input.delete();
     }
 
-    public void testHomeAndDemoReading() throws Exception {
+    public void testMinimalHomeAndReading() throws Exception {
         MainActivity activity = (MainActivity) getInstrumentation().startActivitySync(
             new Intent(getInstrumentation().getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         try {
-            AccessibilityNodeInfo demo = waitForText("体验示例文档", 10000);
-            assertNotNull("Home must offer demo document", demo);
-            assertTrue(demo.performAction(AccessibilityNodeInfo.ACTION_CLICK));
+            assertNotNull("Home must offer file opening", waitForText("打开文件", 10000));
+            getInstrumentation().runOnMainSync(() -> assertEquals(1, visibleLabelCount(activity.getWindow().getDecorView())));
+            File input = new File(getTargetContext().getCacheDir(), "ui.docx");
+            try (InputStream source = getContext().getAssets().open("sample.docx"); OutputStream target = new FileOutputStream(input)) {
+                source.transferTo(target);
+            }
+            getInstrumentation().runOnMainSync(() -> activity.onActivityResult(10, Activity.RESULT_OK,
+                new Intent().setData(android.net.Uri.fromFile(input))));
             assertNotNull("DOCX viewer must offer PDF export", waitForText("导出 PDF", 30000));
             assertNotNull("Page counter must be visible", waitForText("1 / 2", 10000));
             Thread.sleep(800);
@@ -78,6 +83,18 @@ public class DocumentIntegrationTest extends Instrumentation {
             getInstrumentation().waitForIdleSync();
             assertNotNull("Document must survive activity recreation", waitForText("1 / 2", 10000));
         } finally { getInstrumentation().runOnMainSync(activity::finish); }
+    }
+
+    private int visibleLabelCount(android.view.View view) {
+        if (!view.isShown()) return 0;
+        if (view instanceof android.widget.TextView)
+            return ((android.widget.TextView) view).getText().length() > 0 ? 1 : 0;
+        int count = 0;
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) count += visibleLabelCount(group.getChildAt(i));
+        }
+        return count;
     }
 
     private PdfCanvas findCanvas(android.view.View view) {

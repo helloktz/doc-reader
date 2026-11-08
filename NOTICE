@@ -14,7 +14,7 @@ Font upstream: https://github.com/notofonts/noto-cjk
 License: SIL Open Font License 1.1, native/mobile-fonts/OFL.txt.
 
 Full third-party notices, including WordCraft's bundled font notices, ship in
-app/src/main/assets/open-source-licenses.txt and are accessible from the home screen.
+app/src/main/assets/open-source-licenses.txt inside the APK and in this repository.
 
 The app icon and the sample document are original to this project.
 No WordCraft brand artwork or desktop interface is included.

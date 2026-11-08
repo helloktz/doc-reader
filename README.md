@@ -6,13 +6,13 @@ Android 14+ 的离线 DOCX / PDF 阅读器。打开文件即可阅读，支持�
 
 ## 安装
 
-从本仓库的 Releases 下载 `doc-reader-v0.1.0.apk`，在 Android 手机上允许对应来源安装应用。
+从本仓库的 Releases 下载 `doc-reader-v0.1.1.apk`，在 Android 手机上允许对应来源安装应用。
 
 - 最低 Android 14 / API 34，目标 Android 16 / API 36。
 - APK 包含 ARM64（常见手机）和 x86_64（模拟器）两种架构。
 - 点击「打开文件」选择 DOCX/PDF，也可从其他应用通过「打开方式」或「分享」进入。
 - DOCX 首次打开需要本地排版转换；阅读界面右上角可以导出 PDF，保存位置由系统文件选择器决定。
-- 内置示例可在断网状态体验。开源许可可在首页查看。
+- 首页只有「打开文件」；阅读页只显示返回、文件名、页码，以及 DOCX 的导出按钮。
 
 ## 实现范围
 
@@ -34,7 +34,7 @@ DOCX 先转换为应用私有缓存中的 PDF，阅读与导出使用同一份�
 gh repo clone helloktz/doc-reader -- --recurse-submodules --shallow-submodules
 ```
 
-`vendor/wordcraft` 是固定提交的浅子模块。Cargo 的依赖版本固定在 `native/Cargo.lock` 中，保留了上游要求的 Krilla 补丁。应用代码采用 MIT，第三方代码和字体遵循各自许可，详见 `NOTICE` 和应用中的开源许可。
+`vendor/wordcraft` 是固定提交的浅子模块。Cargo 的依赖版本固定在 `native/Cargo.lock` 中，保留了上游要求的 Krilla 补丁。应用代码采用 MIT，第三方代码和字体遵循各自许可，详见 `NOTICE` 及 APK 内的 `assets/open-source-licenses.txt`。
 
 ## 在本机构建
 
@@ -44,7 +44,7 @@ gh repo clone helloktz/doc-reader -- --recurse-submodules --shallow-submodules
 .\build.ps1 -Offline
 ```
 
-产物：`deliverables/doc-reader-v0.1.0.apk`。
+产物：`deliverables/doc-reader-v0.1.1.apk`。
 
 首次换机构建需要联网获取锁定的 Cargo/Gradle 依赖。脚本不安装 Android SDK/NDK。也可以通过 `-ToolsRoot` 指向另一个同结构工具目录；已有 native 库时可用 `-SkipNative`。
 
@@ -52,7 +52,7 @@ gh repo clone helloktz/doc-reader -- --recurse-submodules --shallow-submodules
 
 ## 验证
 
-`app/src/androidTest` 中的集成测试直接调用 JNI，检查双页 DOCX 转换、PDF 实际渲染、损坏输入、首页/示例、双指缩放、双击还原和 Activity 重建。
+`app/src/androidTest` 中的集成测试直接调用 JNI，检查双页 DOCX 转换、PDF 实际渲染、损坏输入、极简首页、文档打开、双指缩放、双击还原和 Activity 重建。示例文档只打包到测试 APK。
 
 ```powershell
 . 'D:\Developer\tools\rust\activate.ps1'
@@ -64,6 +64,6 @@ adb shell am instrument -w io.github.helloktz.docreader.test/io.github.helloktz.
 
 测试使用独立调试签名，已安装正式签名版本时，需要先卸载正式版本或使用单独的模拟器。
 
-`tests/ui_smoke.py` 验证系统选择器导入 DOCX/PDF、系统导出、滚动、许可弹窗和输入文件不变。该脚本面向英文界面的测试模拟器，并需要 `test-output/sample.pdf`（可用 `native/examples/convert.rs` 从示例生成）。
+`tests/ui_smoke.py` 验证首页只有一个打开按钮、系统选择器导入 DOCX/PDF、系统导出、滚动和输入文件不变。该脚本面向英文界面的测试模拟器，并需要 `test-output/sample.pdf`（可用 `native/examples/convert.rs` 从 `app/src/androidTest/assets/sample.docx` 生成）。
 
 详细交付检查见 `VALIDATION.md`。

@@ -5,7 +5,7 @@ import struct
 import zlib
 
 root = Path(__file__).resolve().parents[1]
-out = root / 'app/src/main/assets/sample.docx'
+out = root / 'app/src/androidTest/assets/sample.docx'
 out.parent.mkdir(parents=True, exist_ok=True)
 def chunk(kind, data):
     return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))

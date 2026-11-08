@@ -21,6 +21,7 @@ class MainActivity : Activity() {
     private val io = Executors.newSingleThreadExecutor()
     private lateinit var root: LinearLayout
     private lateinit var content: FrameLayout
+    private lateinit var toolbar: LinearLayout
     private lateinit var title: TextView
     private lateinit var export: Button
     private lateinit var back: Button
@@ -65,9 +66,9 @@ class MainActivity : Activity() {
         window.statusBarColor = paper
         window.navigationBarColor = paper
         window.setDecorFitsSystemWindows(false)
-        val toolbar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(4), dp(8), dp(4)) }
+        toolbar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(4), dp(8), dp(4)) }
         back = button("‹ 返回") { home() }
-        title = label("文阅", 18f).apply { setSingleLine(); ellipsize = android.text.TextUtils.TruncateAt.END; setTypeface(null, Typeface.BOLD) }
+        title = label("", 18f).apply { setSingleLine(); ellipsize = android.text.TextUtils.TruncateAt.END; setTypeface(null, Typeface.BOLD) }
         export = button("导出 PDF") { chooseExport() }
         toolbar.addView(back, LinearLayout.LayoutParams(dp(76), dp(48)))
         toolbar.addView(title, LinearLayout.LayoutParams(0, dp(48), 1f))
@@ -79,7 +80,7 @@ class MainActivity : Activity() {
         page = label("", 12f).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, dp(8)) }
         root.addView(page)
         pdf = PdfCanvas(this).apply {
-            contentDescription = "PDF 页面，双指缩放，滑动阅读，双击放大或还原"
+            contentDescription = "PDF 页面"
             onPageChanged = { current, total -> page.text = getString(R.string.page_position, current, total) }
             onFailure = { message -> if (!stopped) failure(message) }
         }
@@ -96,24 +97,11 @@ class MainActivity : Activity() {
         ticket++; busy = false; currentPdf = null
         pdf.closeDocument()
         (pdf.parent as? android.view.ViewGroup)?.removeView(pdf)
-        title.text = "文阅"; back.visibility = View.GONE; export.visibility = View.GONE; page.text = "离线阅读 · 原文件保持只读"
+        toolbar.visibility = View.GONE
+        page.visibility = View.GONE
         content.removeAllViews()
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(32), dp(24), dp(32), dp(24))
-        }
-        card.addView(label("文", 58f, green).apply { setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(-1, dp(100)))
-        card.addView(label("打开，即阅读。", 28f).apply { gravity = Gravity.CENTER; setTypeface(null, Typeface.BOLD) })
-        card.addView(label("DOCX 与 PDF，专注眼前的文字。", 14f).apply { gravity = Gravity.CENTER; setPadding(0, dp(16), 0, dp(32)) })
-        card.addView(button("打开文件", true) { chooseFile() }, LinearLayout.LayoutParams(-1, dp(54)))
-        card.addView(button("体验示例文档") { openDemo() }, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(12) })
-        card.addView(button("开源许可") {
-            val text = label(assets.open("open-source-licenses.txt").bufferedReader().use { it.readText() }, 12f)
-            text.setPadding(dp(20), dp(16), dp(20), dp(16))
-            val scroll = ScrollView(this).apply { addView(text) }
-            AlertDialog.Builder(this).setTitle("开源许可").setView(scroll).setPositiveButton("关闭", null).show()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
-        content.addView(card, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER))
+        content.addView(button("打开文件", true) { chooseFile() },
+            FrameLayout.LayoutParams(dp(180), dp(52), Gravity.CENTER))
     }
 
     private fun chooseFile() {
@@ -141,6 +129,7 @@ class MainActivity : Activity() {
         (pdf.parent as? android.view.ViewGroup)?.removeView(pdf)
         content.removeAllViews(); back.visibility = View.VISIBLE; export.visibility = View.GONE
         title.text = name; page.text = ""
+        toolbar.visibility = View.VISIBLE; page.visibility = View.GONE
         val loading = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         loading.addView(ProgressBar(this), LinearLayout.LayoutParams(dp(40), dp(40)))
         loading.addView(label("正在打开…", 15f).apply { setPadding(0, dp(18), 0, 0) })
@@ -194,6 +183,7 @@ class MainActivity : Activity() {
     private fun showPdf(file: File, name: String, docx: Boolean) {
         currentPdf = file; currentName = name; fromDocx = docx; busy = true
         title.text = name; back.visibility = View.VISIBLE; export.visibility = View.GONE
+        toolbar.visibility = View.VISIBLE; page.visibility = View.VISIBLE
         content.removeAllViews()
         content.addView(pdf, FrameLayout.LayoutParams(-1, -1))
         val id = ticket
@@ -201,18 +191,6 @@ class MainActivity : Activity() {
             if (id == ticket && !stopped) {
                 busy = false; export.visibility = if (docx) View.VISIBLE else View.GONE
             }
-        }
-    }
-
-    private fun openDemo() {
-        val id = loading("示例文档.docx")
-        io.execute {
-            val input = File.createTempFile("demo-", ".docx", cacheDir)
-            try {
-                assets.open("sample.docx").use { source -> input.outputStream().use { source.copyTo(it) } }
-                prepare(input, "示例文档.docx", id)
-            } catch (e: Exception) { runOnUiThread { if (id == ticket && !stopped) failure(e.message ?: "无法打开示例") } }
-            finally { input.delete() }
         }
     }
 
