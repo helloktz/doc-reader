@@ -51,8 +51,8 @@ try {
     & $gradle @gradleArgs
     if ($LASTEXITCODE -ne 0) { throw 'Android build or lint failed' }
     New-Item -ItemType Directory -Force deliverables | Out-Null
-    Copy-Item app/build/outputs/apk/release/app-release.apk deliverables/doc-reader-v1.0.0.apk -Force
-    Write-Output (Join-Path $projectRoot 'deliverables/doc-reader-v1.0.0.apk')
+    Copy-Item app/build/outputs/apk/release/app-release.apk deliverables/doc-reader-v1.0.1.apk -Force
+    Write-Output (Join-Path $projectRoot 'deliverables/doc-reader-v1.0.1.apk')
 } finally {
     Pop-Location
     Remove-Item Env:DOCREADER_KEY_PASSWORD -ErrorAction SilentlyContinue

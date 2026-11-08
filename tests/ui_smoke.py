@@ -1,4 +1,4 @@
-"""End-to-end release checks with real file picker and same-folder export."""
+"""End-to-end release checks with real file picker and Documents export."""
 import json
 import os
 from pathlib import Path
@@ -44,9 +44,11 @@ def shot(name):
     run('shell', 'screencap', '-p', '/sdcard/doc-reader-shot.png')
     run('pull', '/sdcard/doc-reader-shot.png', str(output / name))
 
-def pick(name):
+def pick(name, location='Downloads'):
     tap(find('打开文件'))
-    # Search avoids depending on the number of previous test files in Downloads.
+    # The picker remembers its previous root; search is scoped to that root.
+    tap(find('Show roots'))
+    tap(find(location, resource='android:id/title'))
     tap(find('Search'))
     edit = next(n for n in tree().iter('node') if n.get('resource-id', '').endswith('search_src_text'))
     tap(edit)
@@ -60,17 +62,16 @@ def fetch_pdf(name, local):
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
         try:
-            run('pull', '/sdcard/Download/' + name, str(local))
+            run('pull', '/sdcard/Documents/' + name, str(local))
             data = local.read_bytes()
             if data.startswith(b'%PDF-') and b'%%EOF' in data[-128:]:
                 return
         except subprocess.CalledProcessError:
             pass
         time.sleep(.3)
-    raise AssertionError('Export did not produce a complete sibling PDF: ' + name)
+    raise AssertionError('Export did not produce a complete PDF in Documents: ' + name)
 
 run('push', str(root / 'app/src/androidTest/assets/sample.docx'), '/sdcard/Download/' + docx_name)
-run('push', str(output / 'sample.pdf'), '/sdcard/Download/reading-test.pdf')
 run('shell', 'am', 'start', '-S', '-W', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER',
     '-f', '0x10008000', '-n', 'io.github.helloktz.docreader/.MainActivity')
 find('打开文件')
@@ -89,6 +90,9 @@ while time.monotonic() < deadline:
 else:
     raise AssertionError('DOCX text fit did not select the fitted viewport')
 shot('release-text-fit.png')
+assert find('解锁尺寸').get('selected') == 'true'
+assert find('恢复默认').get('enabled') == 'false'
+tap(find('解锁尺寸'))
 tap(find('恢复默认'))
 assert find('恢复默认').get('selected') == 'true'
 
@@ -120,11 +124,12 @@ if switches:
     run('shell', 'input', 'keyevent', '4')
 find('返回')
 fetch_pdf(stem + '.pdf', output / 'exported-final.pdf')
+assert run('shell', 'test', '!', '-e', '/sdcard/Download/' + stem + '.pdf') == ''
 
 # Exercise overwrite with a known non-PDF sentinel.
 sentinel = output / 'export-sentinel.pdf'
 sentinel.write_bytes(b'old target')
-run('push', str(sentinel), '/sdcard/Download/' + stem + '.pdf')
+run('push', str(sentinel), '/sdcard/Documents/' + stem + '.pdf')
 tap(find('导出 PDF'))
 tap(find('覆盖'))
 fetch_pdf(stem + '.pdf', output / 'overwritten-final.pdf')
@@ -132,13 +137,13 @@ tap(find('导出 PDF'))
 tap(find('都保存'))
 fetch_pdf(stem + ' (1).pdf', output / 'both-final.pdf')
 tap(find('返回'))
-pick('reading-test.pdf')
+pick(stem + '.pdf', 'Documents')
 assert not any(n.get('content-desc') == '导出 PDF' for n in tree().iter('node'))
 shot('release-pdf.png')
 tap(find('返回'))
 run('pull', '/sdcard/Download/' + docx_name, str(output / 'original-after.docx'))
 assert (output / 'original-after.docx').read_bytes() == (root / 'app/src/androidTest/assets/sample.docx').read_bytes()
 report = {'result': 'PASS', 'checks': ['minimal home', 'icon toolbar', 'outline jump', 'thumbnail jump',
-    'same-directory export', 'overwrite', 'keep both suffix', 'PDF open', 'source unchanged']}
+    'text fit auto-lock', 'Documents export', 'overwrite', 'keep both suffix', 'PDF open', 'source unchanged']}
 (output / 'release-ui-test.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
 print(report)

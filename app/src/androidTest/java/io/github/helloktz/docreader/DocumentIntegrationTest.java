@@ -18,10 +18,10 @@ public class DocumentIntegrationTest extends Instrumentation {
         Bundle result = new Bundle();
         try {
             testDocxToReadablePdfAndMalformedInput();
-            testSiblingExport();
+            testDocumentsExport();
             testAdaptiveTextWidth();
             testMinimalHomeAndReading();
-            result.putString("stream", "PASS: conversion, PDF outline, sibling export/overwrite/suffix, global text fit, reset/cancel/empty text, minimal home, pinch fallback, size lock, vertical scroll, fling, activity recreation\n");
+            result.putString("stream", "PASS: conversion, PDF outline, Documents export/overwrite/suffix, global text fit and auto-lock, reset/cancel/empty text, minimal home, pinch fallback, size lock, vertical scroll, fling, activity recreation\n");
             finish(Activity.RESULT_OK, result);
         } catch (Throwable error) {
             result.putString("stream", android.util.Log.getStackTraceString(error));
@@ -70,23 +70,31 @@ public class DocumentIntegrationTest extends Instrumentation {
         input.delete();
     }
 
-    public void testSiblingExport() throws Exception {
+    public void testDocumentsExport() throws Exception {
         File directory = new File(getTargetContext().getCacheDir(), "export-test");
         directory.mkdirs();
         File source = new File(directory, "book.docx");
         try (InputStream input = getContext().getAssets().open("sample.docx"); OutputStream output = new FileOutputStream(source)) { input.transferTo(output); }
         byte[] original = java.nio.file.Files.readAllBytes(source.toPath());
         File pdf = new File(getTargetContext().getCacheDir(), "integration.pdf");
+        File destination = PdfExport.INSTANCE.destination(directory, "book.docx");
+        assertTrue(PdfExport.INSTANCE.destination("book.docx").getParentFile().equals(
+            android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS)));
+        assertTrue(PdfExport.INSTANCE.destination(directory, "../book.DOCX").equals(destination));
+        assertTrue(PdfExport.INSTANCE.destination(directory, "renamed.pdf").getName().equals("renamed.pdf.pdf"));
         for (String name : new String[]{"book.pdf", "book (1).pdf", "book (2).pdf"}) new File(directory, name).delete();
-        File first = SameFolderExport.INSTANCE.save(pdf, source, false);
+        File first = PdfExport.INSTANCE.save(pdf, destination, false);
         assertTrue(first.getName().equals("book.pdf"));
-        File both = SameFolderExport.INSTANCE.save(pdf, source, false);
+        File both = PdfExport.INSTANCE.save(pdf, destination, false);
         assertTrue(both.getName().equals("book (1).pdf"));
-        assertTrue(SameFolderExport.INSTANCE.save(pdf, source, false).getName().equals("book (2).pdf"));
+        assertTrue(PdfExport.INSTANCE.save(pdf, destination, false).getName().equals("book (2).pdf"));
         java.nio.file.Files.write(first.toPath(), "old pdf".getBytes());
-        assertTrue(SameFolderExport.INSTANCE.save(pdf, source, true).equals(first));
+        assertTrue(PdfExport.INSTANCE.save(pdf, destination, true).equals(first));
         assertTrue(java.util.Arrays.equals(java.nio.file.Files.readAllBytes(pdf.toPath()), java.nio.file.Files.readAllBytes(first.toPath())));
         assertTrue(java.util.Arrays.equals(original, java.nio.file.Files.readAllBytes(source.toPath())));
+        File fresh = new File(directory, "new-documents-" + System.nanoTime());
+        File created = PdfExport.INSTANCE.save(pdf, PdfExport.INSTANCE.destination(fresh, "new.docx"), false);
+        assertTrue("Missing export directory is created", fresh.isDirectory() && created.isFile());
     }
 
     public void testMinimalHomeAndReading() throws Exception {
@@ -134,12 +142,16 @@ public class DocumentIntegrationTest extends Instrumentation {
             runOnMainSync(() -> {
                 PdfCanvas view = findCanvas(activity.getWindow().getDecorView());
                 assertTrue("Reset cancels a pending calculation", view.isDefaultView() && !view.isTextFitBusy());
+                assertTrue("Cancelled fitting does not activate the lock", !view.isSizeLocked());
                 view.fitText();
             });
             waitForTextFit(activity);
             runOnMainSync(() -> {
                 PdfCanvas view = findCanvas(activity.getWindow().getDecorView());
                 assertTrue("Text fit is a distinct viewport", view.isTextFitted() && !view.isDefaultView());
+                assertTrue("Successful text fitting activates size lock", view.isSizeLocked());
+                view.setSizeLocked(false); view.fitText();
+                assertTrue("Cached text fitting also activates size lock", view.isSizeLocked());
                 double pad = 12 * getTargetContext().getResources().getDisplayMetrics().density;
                 double left = edges[0] * view.getWidth() * view.getZoomLevel() - view.getHorizontalOffset();
                 double right = edges[1] * view.getWidth() * view.getZoomLevel() - view.getHorizontalOffset();
@@ -154,6 +166,10 @@ public class DocumentIntegrationTest extends Instrumentation {
                 assertTrue("Default is still full paper width", view.isDefaultView() && !view.isTextFitted());
                 view.restorePosition(saved);
                 assertTrue("Text fit and lock restore together", view.isTextFitted() && view.isSizeLocked());
+                view.setSizeLocked(false);
+                Bundle unlocked = new Bundle(); view.savePosition(unlocked);
+                view.resetView(); view.restorePosition(unlocked);
+                assertTrue("An explicitly unlocked fitted view stays unlocked on restoration", view.isTextFitted() && !view.isSizeLocked());
             });
             for (String fixture : new String[]{"text-fit-full.pdf", "text-fit-narrow.pdf"}) {
                 File special = new File(getTargetContext().getCacheDir(), fixture);
@@ -191,7 +207,7 @@ public class DocumentIntegrationTest extends Instrumentation {
             waitForTextFit(activity);
             runOnMainSync(() -> {
                 PdfCanvas view = findCanvas(activity.getWindow().getDecorView());
-                assertTrue("Image-only PDF remains readable at its original scale", view.getPageCount() == 1 && view.isDefaultView() && !view.isTextFitted());
+                assertTrue("Image-only PDF remains readable without auto-lock", view.getPageCount() == 1 && view.isDefaultView() && !view.isTextFitted() && !view.isSizeLocked());
             });
         } finally { runOnMainSync(activity::finish); }
     }

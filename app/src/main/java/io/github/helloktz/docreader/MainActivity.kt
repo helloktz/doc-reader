@@ -39,7 +39,6 @@ class MainActivity : Activity() {
     private var fromDocx = false
     private var busy = false
     private var ticket = 0
-    private var sourceUri: Uri? = null
     private var exportBusy = false
     private var exportSnapshot: File? = null
     private var pendingExport = false
@@ -50,7 +49,6 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
-        sourceUri = savedInstanceState?.getString("source")?.let(Uri::parse)
         pendingExport = savedInstanceState?.getBoolean("pendingExport") ?: false
         val restored = savedInstanceState?.getString("pdf")?.let(::File)
         if (restored?.isFile == true) showPdf(restored, savedInstanceState.getString("name") ?: "文档", savedInstanceState.getBoolean("docx"), savedInstanceState)
@@ -194,7 +192,7 @@ class MainActivity : Activity() {
         root.setBackgroundColor(paper)
         val previous = currentPdf
         if (previous != null && previous != exportSnapshot) io.execute { previous.delete() }
-        closeNavigation(); sourceUri = null
+        closeNavigation()
         ticket++; busy = false; currentPdf = null
         pdf.closeDocument()
         (pdf.parent as? android.view.ViewGroup)?.removeView(pdf)
@@ -241,8 +239,6 @@ class MainActivity : Activity() {
     }
 
     private fun openUri(uri: Uri) {
-        sourceUri = uri
-        try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
         val id = loading("打开文件")
         io.execute {
             try {
@@ -304,40 +300,38 @@ class MainActivity : Activity() {
 
     private fun chooseExport() {
         val snapshot = currentPdf ?: return
-        val uri = sourceUri ?: run { exportError("请重新打开原 DOCX 后导出"); return }
         if (exportBusy || busy || !fromDocx) return
-        val privateFile = uri.scheme == "file" && uri.path?.startsWith(applicationInfo.dataDir + File.separator) == true
-        if (!privateFile && !Environment.isExternalStorageManager()) {
+        if (!Environment.isExternalStorageManager()) {
             pendingExport = true
             startActivityForResult(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")), 12)
             return
         }
         exportBusy = true; exportSnapshot = snapshot; export.isEnabled = false
+        val name = currentName
         io.execute {
             try {
-                val source = SameFolderExport.sourceFile(this, uri) ?: throw IOException("此文件来源未提供本地目录，无法导出")
-                require(source.isFile) { "原文件已移动或无法访问" }
-                val target = SameFolderExport.destination(source)
-                require(target.canonicalFile != source.canonicalFile) { "无法覆盖原文件，请检查 DOCX 后缀名" }
+                val target = PdfExport.destination(name)
                 val exists = target.exists()
                 runOnUiThread {
                     if (stopped) return@runOnUiThread
                     if (exists) AlertDialog.Builder(this).setTitle(target.name)
-                        .setPositiveButton("覆盖") { _, _ -> writeExport(snapshot, source, true) }
-                        .setNegativeButton("都保存") { _, _ -> writeExport(snapshot, source, false) }
+                        .setPositiveButton("覆盖") { _, _ -> writeExport(snapshot, target, true) }
+                        .setNegativeButton("都保存") { _, _ -> writeExport(snapshot, target, false) }
                         .setNeutralButton("取消") { _, _ -> exportFinished() }
                         .setOnCancelListener { exportFinished() }.show()
-                    else writeExport(snapshot, source, false)
+                    else writeExport(snapshot, target, false)
                 }
             } catch (e: Exception) { runOnUiThread { if (!stopped) { exportFinished(); exportError(e.message) } } }
         }
     }
 
-    private fun writeExport(snapshot: File, source: File, overwrite: Boolean) {
+    private fun writeExport(snapshot: File, target: File, overwrite: Boolean) {
         io.execute {
             try {
-                SameFolderExport.save(snapshot, source, overwrite)
-                runOnUiThread { if (!stopped) { exportFinished(); Toast.makeText(this, "PDF 已保存", Toast.LENGTH_SHORT).show() } }
+                val saved = PdfExport.save(snapshot, target, overwrite)
+                // Index the public document so the system file picker's Documents/search views can find it.
+                runCatching { android.media.MediaScannerConnection.scanFile(this, arrayOf(saved.absolutePath), arrayOf("application/pdf"), null) }
+                runOnUiThread { if (!stopped) { exportFinished(); Toast.makeText(this, "已保存到 Documents", Toast.LENGTH_SHORT).show() } }
             } catch (e: Exception) { runOnUiThread { if (!stopped) { exportFinished(); exportError(e.message) } } }
         }
     }
@@ -377,7 +371,6 @@ class MainActivity : Activity() {
         super.onSaveInstanceState(outState)
         currentPdf?.let { outState.putString("pdf", it.absolutePath) }
         outState.putString("name", currentName); outState.putBoolean("docx", fromDocx)
-        sourceUri?.let { outState.putString("source", it.toString()) }
         outState.putBoolean("pendingExport", pendingExport)
         pdf.savePosition(outState)
     }

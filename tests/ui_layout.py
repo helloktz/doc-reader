@@ -120,8 +120,6 @@ try:
         assert_controls(nodes, width, height)
         if name in ['phone-375', 'small-large-text']:
             shot('layout-text-fit-' + name)
-        tap(named(nodes, '锁定尺寸'))
-        nodes = hierarchy()
         assert named(nodes, '解锁尺寸').get('selected') == 'true'
         assert named(nodes, '恢复默认').get('enabled') == 'false'
         assert named(nodes, '适应文字').get('enabled') == 'false'

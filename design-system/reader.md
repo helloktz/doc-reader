@@ -19,6 +19,9 @@ pattern did not fit this reader and was discarded.
 - Reset uses the curved return arrow; fit text uses the horizontal width arrows.
   These are separate actions. Both respect the size lock. A spinner replaces
   the fit glyph during analysis, and a selected border identifies the fitted view.
+- Successful user-requested text fitting also activates size lock. Failed or
+  cancelled fitting keeps the existing lock state. An explicit unlock is preserved
+  during resize and state restoration.
 - Five bottom actions keep 48dp targets with 8dp gaps. If the page badge cannot
   fit beside them, it moves below at the lower right. Very narrow split-screen
   windows wrap the actions too, preserving their touch targets.

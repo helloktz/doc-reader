@@ -139,7 +139,7 @@ class PdfCanvas(context: Context) : View(context) {
         if (isSizeLocked || width <= 0 || textRequest != null) return
         val doc = document ?: return
         if (doc.textScanned) {
-            if (doc.textEdges == null) onTextFitError?.invoke("此文档没有可识别的文字") else applyTextFit()
+            if (doc.textEdges == null) onTextFitError?.invoke("此文档没有可识别的文字") else applyTextFit(lockAfterFit = true)
             return
         }
         val request = AtomicBoolean(false); val ticket = generation
@@ -165,7 +165,7 @@ class PdfCanvas(context: Context) : View(context) {
                     doc.textEdges = analysis.edges
                     doc.textRows = analysis.rows
                     doc.textScanned = true
-                    if (doc.textEdges == null) onTextFitError?.invoke("此文档没有可识别的文字") else applyTextFit()
+                    if (doc.textEdges == null) onTextFitError?.invoke("此文档没有可识别的文字") else applyTextFit(lockAfterFit = true)
                 }.onFailure { onTextFitError?.invoke("无法完整读取此文档的文字边界") }
             }
         }
@@ -193,7 +193,7 @@ class PdfCanvas(context: Context) : View(context) {
         return if (nearest.isFinite()) nearest else top
     }
 
-    private fun applyTextFit(anchorToText: Boolean = true) {
+    private fun applyTextFit(anchorToText: Boolean = true, lockAfterFit: Boolean = false) {
         val edges = document?.textEdges ?: return
         if (width <= 0) return
         val target = textFitZoom(edges)
@@ -205,6 +205,7 @@ class PdfCanvas(context: Context) : View(context) {
         offsetY = focus * target - if (relocate) textPadding else 0f
         zoom = target; offsetX = edges.left * width * zoom - textPadding
         marginMode = true; isTextFitted = true
+        if (lockAfterFit) setSizeLocked(true)
         clampOffsets(); onViewportChanged?.invoke(); invalidate()
     }
 
