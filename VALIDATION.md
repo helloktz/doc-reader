@@ -1,5 +1,13 @@
 # 交付检查
 
+## v1.0.0
+
+交付 APK：`deliverables/doc-reader-v1.0.0.apk`，48,944,140 字节。
+
+- 对外版本号升级为 `1.0.0`，Android 内部版本序号为 `7`，同步构建产物名称与下载说明；本次没有功能改动。
+- 离线构建成功，APK 中的版本元数据核对通过，签名及 16 KiB 对齐检查通过；Lint 0 错误，仅原有 ScopedStorage 警告。
+- 模拟器覆盖安装及启动成功，系统报告 `versionName=1.0.0`、`versionCode=7`。功能检查沿用此前已通过的集成和布局测试结果。
+
 ## v0.4.0
 
 交付 APK：`deliverables/doc-reader-v0.4.0.apk`，48,944,140 字节。

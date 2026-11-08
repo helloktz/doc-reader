@@ -6,7 +6,7 @@ Android 14+ 的离线 DOCX / PDF 阅读器。打开文件即可阅读，支持�
 
 ## 安装
 
-从本仓库的 Releases 下载 `doc-reader-v0.4.0.apk`，在 Android 手机上允许对应来源安装应用。
+从本仓库的 Releases 下载 `doc-reader-v1.0.0.apk`，在 Android 手机上允许对应来源安装应用。
 
 - 最低 Android 14 / API 34，目标 Android 16 / API 36。
 - APK 包含 ARM64（常见手机）和 x86_64（模拟器）两种架构。
@@ -50,7 +50,7 @@ gh repo clone helloktz/doc-reader -- --recurse-submodules --shallow-submodules
 .\build.ps1 -Offline
 ```
 
-产物：`deliverables/doc-reader-v0.4.0.apk`。
+产物：`deliverables/doc-reader-v1.0.0.apk`。
 
 首次换机构建需要联网获取锁定的 Cargo/Gradle 依赖。脚本不安装 Android SDK/NDK。也可以通过 `-ToolsRoot` 指向另一个同结构工具目录；已有 native 库时可用 `-SkipNative`。
 
