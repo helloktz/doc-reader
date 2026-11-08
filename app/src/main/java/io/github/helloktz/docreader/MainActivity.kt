@@ -4,7 +4,6 @@ import android.app.*
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
@@ -17,9 +16,8 @@ import java.io.IOException
 import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
-    private val paper = Color.rgb(246, 245, 240)
-    private val ink = Color.rgb(29, 48, 41)
-    private val green = Color.rgb(36, 92, 76)
+    private val paper by lazy { getColor(R.color.reader_background) }
+    private val ink by lazy { getColor(R.color.reader_ink) }
     private val io = Executors.newSingleThreadExecutor()
     private lateinit var root: LinearLayout
     private lateinit var content: FrameLayout
@@ -30,6 +28,8 @@ class MainActivity : Activity() {
     private lateinit var footer: LinearLayout
     private lateinit var lockButton: ImageButton
     private lateinit var fitButton: ImageButton
+    private lateinit var outlineButton: ImageButton
+    private lateinit var pagesButton: ImageButton
     private lateinit var pdf: PdfCanvas
     private lateinit var page: TextView
     private var currentPdf: File? = null
@@ -59,18 +59,19 @@ class MainActivity : Activity() {
     private fun label(text: String, size: Float, color: Int = ink) = TextView(this).apply {
         this.text = text; textSize = size; setTextColor(color)
     }
-    private fun button(text: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
-        this.text = text; isAllCaps = false; textSize = 14f
-        setTextColor(if (primary) Color.WHITE else green)
-        background = GradientDrawable().apply { setColor(if (primary) green else Color.TRANSPARENT); cornerRadius = dp(14).toFloat() }
+    private fun button(text: String, action: () -> Unit) = Button(this).apply {
+        this.text = text; isAllCaps = false; textSize = 16f
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        setTextColor(ink); setPadding(dp(24), dp(16), dp(24), dp(16)); minHeight = dp(64)
+        background = ReaderUi.background(this@MainActivity, outlined = true, radius = 20)
+        stateListAnimator = null
+        val folder = getDrawable(Icon.OPEN.resource)!!.apply { setBounds(0, 0, dp(28), dp(28)) }
+        setCompoundDrawablesRelative(folder, null, null, null); compoundDrawablePadding = dp(12)
         setOnClickListener { action() }
     }
 
-    private fun icon(icon: Icon, name: String, action: () -> Unit) = ImageButton(this).apply {
-        setImageDrawable(ReaderIcon(icon, green)); setPadding(dp(12), dp(12), dp(12), dp(12))
-        setBackgroundColor(Color.TRANSPARENT); contentDescription = name; tooltipText = name
-        setOnClickListener { action() }
-    }
+    private fun icon(icon: Icon, name: String, emphasized: Boolean = false, action: () -> Unit) =
+        ReaderUi.icon(this, icon, name, emphasized, action)
 
     private fun buildUi() {
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(paper) }
@@ -82,10 +83,16 @@ class MainActivity : Activity() {
         window.statusBarColor = paper
         window.navigationBarColor = paper
         window.setDecorFitsSystemWindows(false)
-        toolbar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(4), dp(8), dp(4)) }
+        toolbar = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(8), dp(12), dp(8))
+            setBackgroundColor(Color.WHITE)
+        }
         back = icon(Icon.BACK, "返回") { if (navigation != null) closeNavigation() else home() }
-        title = label("", 18f).apply { setSingleLine(); ellipsize = android.text.TextUtils.TruncateAt.END; setTypeface(null, Typeface.BOLD) }
-        export = icon(Icon.EXPORT, "导出 PDF") { chooseExport() }
+        title = label("", 16f).apply {
+            setSingleLine(); ellipsize = android.text.TextUtils.TruncateAt.END
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setPadding(dp(4), 0, dp(12), 0)
+        }
+        export = icon(Icon.EXPORT, "导出 PDF", emphasized = true) { chooseExport() }
         toolbar.addView(back, LinearLayout.LayoutParams(dp(48), dp(48)))
         toolbar.addView(title, LinearLayout.LayoutParams(0, dp(48), 1f))
         title.gravity = Gravity.CENTER_VERTICAL
@@ -93,19 +100,33 @@ class MainActivity : Activity() {
         root.addView(toolbar)
         content = FrameLayout(this)
         root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
-        footer = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(4), dp(2), dp(8), dp(2)) }
+        footer = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8))
+            setBackgroundColor(Color.WHITE)
+        }
+        fun controlParams() = LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(8) }
         fitButton = icon(Icon.FIT, "适应屏幕") { pdf.fitWidth() }
-        footer.addView(fitButton, LinearLayout.LayoutParams(dp(48), dp(48)))
+        footer.addView(fitButton, controlParams())
         lockButton = icon(Icon.UNLOCK, "锁定尺寸") { pdf.setSizeLocked(!pdf.isSizeLocked) }
-        footer.addView(lockButton, LinearLayout.LayoutParams(dp(48), dp(48)))
-        footer.addView(icon(Icon.OUTLINE, "大纲") { toggleNavigation(0) }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        footer.addView(icon(Icon.PAGES, "页面预览") { toggleNavigation(1) }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        page = label("", 12f).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL }
-        footer.addView(page, LinearLayout.LayoutParams(0, dp(48), 1f))
+        footer.addView(lockButton, controlParams())
+        outlineButton = icon(Icon.OUTLINE, "大纲") { toggleNavigation(0) }
+        pagesButton = icon(Icon.PAGES, "页面预览") { toggleNavigation(1) }
+        footer.addView(outlineButton, controlParams()); footer.addView(pagesButton, controlParams())
+        page = label("", 12f, getColor(R.color.reader_muted)).apply {
+            gravity = Gravity.CENTER; setSingleLine(); ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(10), dp(6), dp(10), dp(6)); minHeight = dp(32)
+            fontFeatureSettings = "tnum"; background = ReaderUi.shape(this@MainActivity, paper, 12)
+        }
+        val position = FrameLayout(this).apply {
+            addView(page, FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.CENTER_VERTICAL))
+        }
+        footer.addView(position, LinearLayout.LayoutParams(0, -1, 1f))
         root.addView(footer)
         pdf = PdfCanvas(this).apply {
             contentDescription = "PDF 页面"
-            onPageChanged = { current, total -> page.text = getString(R.string.page_position, current, total) }
+            onPageChanged = { current, total ->
+                page.text = getString(R.string.page_position, current, total); page.contentDescription = page.text
+            }
             onFailure = { message -> if (!stopped) failure(message) }
             onOutlineReady = { navigation?.refreshOutline() }
             onLockChanged = { updateLockIcon() }
@@ -120,9 +141,9 @@ class MainActivity : Activity() {
     }
 
     private fun updateLockIcon() {
-        lockButton.setImageDrawable(ReaderIcon(if (pdf.isSizeLocked) Icon.LOCK else Icon.UNLOCK, green))
-        lockButton.setBackgroundColor(if (pdf.isSizeLocked) 0x18245c4c else Color.TRANSPARENT)
+        lockButton.setImageResource((if (pdf.isSizeLocked) Icon.LOCK else Icon.UNLOCK).resource)
         lockButton.isSelected = pdf.isSizeLocked
+        lockButton.stateDescription = if (pdf.isSizeLocked) "已锁定" else "未锁定"
         lockButton.contentDescription = if (pdf.isSizeLocked) "解锁尺寸" else "锁定尺寸"
         lockButton.tooltipText = lockButton.contentDescription
         fitButton.isEnabled = !pdf.isSizeLocked
@@ -134,15 +155,26 @@ class MainActivity : Activity() {
         if (existing?.mode == mode) { closeNavigation(); return }
         if (existing != null) existing.select(mode)
         else {
-            navigation = NavigationPanel(this, pdf) { closeNavigation() }.also {
+            navigation = NavigationPanel(this, pdf, { updateNavigationState() }) { closeNavigation() }.also {
                 content.addView(it, FrameLayout.LayoutParams(-1, -1)); it.select(mode)
             }
         }
+        updateNavigationState()
     }
 
-    private fun closeNavigation() { navigation?.let { it.close(); content.removeView(it) }; navigation = null }
+    private fun updateNavigationState() {
+        outlineButton.isSelected = navigation?.mode == 0
+        pagesButton.isSelected = navigation?.mode == 1
+        pdf.importantForAccessibility = if (navigation == null) View.IMPORTANT_FOR_ACCESSIBILITY_AUTO else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+    }
+
+    private fun closeNavigation() {
+        navigation?.let { it.close(); content.removeView(it) }; navigation = null
+        updateNavigationState()
+    }
 
     private fun home() {
+        root.setBackgroundColor(paper)
         val previous = currentPdf
         if (previous != null && previous != exportSnapshot) io.execute { previous.delete() }
         closeNavigation(); sourceUri = null
@@ -152,8 +184,8 @@ class MainActivity : Activity() {
         toolbar.visibility = View.GONE
         footer.visibility = View.GONE
         content.removeAllViews()
-        content.addView(button("打开文件", true) { chooseFile() },
-            FrameLayout.LayoutParams(dp(180), dp(52), Gravity.CENTER))
+        content.addView(button("打开文件") { chooseFile() },
+            FrameLayout.LayoutParams(dp(208), -2, Gravity.CENTER))
     }
 
     private fun chooseFile() {
@@ -175,6 +207,7 @@ class MainActivity : Activity() {
     }
 
     private fun loading(name: String): Int {
+        root.setBackgroundColor(Color.WHITE)
         val previous = currentPdf
         if (previous != null && previous != exportSnapshot) io.execute { previous.delete() }
         closeNavigation()
@@ -236,6 +269,7 @@ class MainActivity : Activity() {
     }
 
     private fun showPdf(file: File, name: String, docx: Boolean, position: Bundle? = null) {
+        root.setBackgroundColor(Color.WHITE)
         currentPdf = file; currentName = name; fromDocx = docx; busy = true
         title.text = name; back.visibility = View.VISIBLE; export.visibility = View.GONE
         toolbar.visibility = View.VISIBLE; footer.visibility = View.VISIBLE

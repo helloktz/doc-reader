@@ -34,7 +34,8 @@ for package in sorted(metadata['packages'], key=lambda p: p['name']):
         if canonical not in seen:
             seen.add(canonical)
             sections.append(f'\n--- {path.name} ---\n' + path.read_text(encoding='utf-8', errors='replace'))
-for path in [root / 'vendor/wordcraft/NOTICE', root / 'vendor/wordcraft/ATTRIBUTION.md', root / 'native/mobile-fonts/OFL.txt']:
+for path in [root / 'NOTICE', root / 'vendor/wordcraft/NOTICE', root / 'vendor/wordcraft/ATTRIBUTION.md',
+             root / 'native/mobile-fonts/OFL.txt', root / 'third_party/iconpark/README.md', root / 'third_party/iconpark/LICENSE']:
     sections.append(f'\n--- {path.name} ---\n' + path.read_text(encoding='utf-8'))
 sections.append('\nNoto Sans CJK SC: https://github.com/notofonts/noto-cjk\nFont source checkout: storytold/craft-fonts aced413\n')
 out = root / 'app/src/main/assets/open-source-licenses.txt'

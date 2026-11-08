@@ -12,6 +12,11 @@ The pinned upstream Krilla patch is retained by native/Cargo.toml.
 PDF outlines are read with hayro-syntax (MIT OR Apache-2.0).
 https://github.com/LaurenzV/hayro
 
+Toolbar icons are adapted from IconPark, by ByteDance and its contributors.
+https://github.com/bytedance/IconPark
+Apache-2.0. Source SVGs, the license and adaptation notes are retained in
+third_party/iconpark. Colors, strokes and selected fills were modified.
+
 Noto Sans CJK SC Regular is copied unmodified from craft-fonts aced413.
 Font upstream: https://github.com/notofonts/noto-cjk
 License: SIL Open Font License 1.1, native/mobile-fonts/OFL.txt.

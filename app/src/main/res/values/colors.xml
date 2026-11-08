@@ -1,0 +1,12 @@
+<resources>
+    <color name="reader_background">#F5F8FA</color>
+    <color name="reader_surface">#FFFFFF</color>
+    <color name="reader_ink">#243847</color>
+    <color name="reader_muted">#566875</color>
+    <color name="reader_accent">#216B60</color>
+    <color name="reader_accent_soft">#E1F3ED</color>
+    <color name="reader_icon_fill">#80D4BA</color>
+    <color name="reader_icon_light">#E6F1EE</color>
+    <color name="reader_border">#DCE5E9</color>
+    <color name="reader_ripple">#28216B60</color>
+</resources>

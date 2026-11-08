@@ -6,7 +6,7 @@ Android 14+ 的离线 DOCX / PDF 阅读器。打开文件即可阅读，支持�
 
 ## 安装
 
-从本仓库的 Releases 下载 `doc-reader-v0.2.0.apk`，在 Android 手机上允许对应来源安装应用。
+从本仓库的 Releases 下载 `doc-reader-v0.3.0.apk`，在 Android 手机上允许对应来源安装应用。
 
 - 最低 Android 14 / API 34，目标 Android 16 / API 36。
 - APK 包含 ARM64（常见手机）和 x86_64（模拟器）两种架构。
@@ -15,6 +15,7 @@ Android 14+ 的离线 DOCX / PDF 阅读器。打开文件即可阅读，支持�
 - 首次导出本地共享存储文件，需要在 Android 系统设置中授予文件管理访问；拒绝授权仍可阅读。系统文件选择器返回的本地存储、下载目录及 SD 卡文件可解析为原目录；不提供实际本地路径的第三方临时 URI 无法同目录导出。
 - 首页只有「打开文件」；阅读页控件使用图标，页码位于右下角。底部依次为贴边适应、尺寸锁定、大纲、页面预览。
 - 锁定保留当前缩放和横向位置，阻止横移及缩放，仍可上下阅读；解锁后可再次缩放。大纲和页面缩略图在左侧浮层中点击跳页。
+- 界面使用统一的 IconPark 双色矢量图标、浅色阅读主题、原生按压反馈和选中标记；跟随系统字体大小，系统关闭动画时不播放浮层入场动画。没有增加功能介绍或标语。
 
 ## 实现范围
 
@@ -46,7 +47,7 @@ gh repo clone helloktz/doc-reader -- --recurse-submodules --shallow-submodules
 .\build.ps1 -Offline
 ```
 
-产物：`deliverables/doc-reader-v0.2.0.apk`。
+产物：`deliverables/doc-reader-v0.3.0.apk`。
 
 首次换机构建需要联网获取锁定的 Cargo/Gradle 依赖。脚本不安装 Android SDK/NDK。也可以通过 `-ToolsRoot` 指向另一个同结构工具目录；已有 native 库时可用 `-SkipNative`。
 
@@ -67,5 +68,7 @@ adb shell am instrument -w io.github.helloktz.docreader.test/io.github.helloktz.
 测试使用独立调试签名，已安装正式签名版本时，需要先卸载正式版本或使用单独的模拟器。
 
 `tests/ui_smoke.py` 验证首页只有一个打开按钮、图标工具栏、大纲/预览跳页、系统选择器导入 DOCX/PDF、首次文件权限授权、同目录导出/覆盖/尾缀，以及输入文件不变。该脚本面向英文界面的测试模拟器，并需要 `test-output/sample.pdf`（可用 `native/examples/convert.rs` 从 `app/src/androidTest/assets/sample.docx` 生成）。
+
+`tests/ui_layout.py` 在专用的 `emulator-5554` 上检查 320dp/375dp 手机、手机横屏及 800dp 平板横竖屏布局，并覆盖 2 倍系统字体、系统深色模式及关闭系统动画。它需要先通过上一项流程授予测试应用文件访问权限，检查后恢复原来的模拟器显示和字体设置。
 
 详细交付检查见 `VALIDATION.md`。
