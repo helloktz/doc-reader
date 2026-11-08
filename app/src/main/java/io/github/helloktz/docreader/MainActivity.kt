@@ -25,9 +25,11 @@ class MainActivity : Activity() {
     private lateinit var title: TextView
     private lateinit var export: ImageButton
     private lateinit var back: ImageButton
-    private lateinit var footer: LinearLayout
+    private lateinit var footer: ReaderBar
     private lateinit var lockButton: ImageButton
     private lateinit var fitButton: ImageButton
+    private lateinit var resetButton: ImageButton
+    private lateinit var fitProgress: ProgressBar
     private lateinit var outlineButton: ImageButton
     private lateinit var pagesButton: ImageButton
     private lateinit var pdf: PdfCanvas
@@ -100,36 +102,42 @@ class MainActivity : Activity() {
         root.addView(toolbar)
         content = FrameLayout(this)
         root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
-        footer = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8))
-            setBackgroundColor(Color.WHITE)
+        resetButton = icon(Icon.RESET, "恢复默认") { pdf.resetView() }
+        fitButton = icon(Icon.FIT, "适应文字") { pdf.fitText() }
+        fitProgress = ProgressBar(this).apply {
+            visibility = View.GONE; importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.reader_accent))
         }
-        fun controlParams() = LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(8) }
-        fitButton = icon(Icon.FIT, "适应屏幕") { pdf.fitWidth() }
-        footer.addView(fitButton, controlParams())
+        val fitSlot = FrameLayout(this).apply {
+            addView(fitButton, FrameLayout.LayoutParams(-1, -1))
+            addView(fitProgress, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
+        }
         lockButton = icon(Icon.UNLOCK, "锁定尺寸") { pdf.setSizeLocked(!pdf.isSizeLocked) }
-        footer.addView(lockButton, controlParams())
         outlineButton = icon(Icon.OUTLINE, "大纲") { toggleNavigation(0) }
         pagesButton = icon(Icon.PAGES, "页面预览") { toggleNavigation(1) }
-        footer.addView(outlineButton, controlParams()); footer.addView(pagesButton, controlParams())
         page = label("", 12f, getColor(R.color.reader_muted)).apply {
             gravity = Gravity.CENTER; setSingleLine(); ellipsize = android.text.TextUtils.TruncateAt.END
             setPadding(dp(10), dp(6), dp(10), dp(6)); minHeight = dp(32)
             fontFeatureSettings = "tnum"; background = ReaderUi.shape(this@MainActivity, paper, 12)
         }
-        val position = FrameLayout(this).apply {
-            addView(page, FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.CENTER_VERTICAL))
-        }
-        footer.addView(position, LinearLayout.LayoutParams(0, -1, 1f))
+        footer = ReaderBar(this, listOf(resetButton, fitSlot, lockButton, outlineButton, pagesButton), page)
         root.addView(footer)
         pdf = PdfCanvas(this).apply {
             contentDescription = "PDF 页面"
             onPageChanged = { current, total ->
                 page.text = getString(R.string.page_position, current, total); page.contentDescription = page.text
+                page.minWidth = kotlin.math.ceil(page.paint.measureText(getString(R.string.page_position, total, total))).toInt() + page.paddingLeft + page.paddingRight
             }
             onFailure = { message -> if (!stopped) failure(message) }
             onOutlineReady = { navigation?.refreshOutline() }
             onLockChanged = { updateLockIcon() }
+            onViewportChanged = { updateViewportButtons() }
+            onTextFitBusy = { active ->
+                fitProgress.visibility = if (active) View.VISIBLE else View.GONE
+                fitButton.imageAlpha = if (active) 0 else 255
+                updateViewportButtons()
+            }
+            onTextFitError = { message -> Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show() }
         }
         setContentView(root)
         window.insetsController?.setSystemBarsAppearance(
@@ -146,8 +154,17 @@ class MainActivity : Activity() {
         lockButton.stateDescription = if (pdf.isSizeLocked) "已锁定" else "未锁定"
         lockButton.contentDescription = if (pdf.isSizeLocked) "解锁尺寸" else "锁定尺寸"
         lockButton.tooltipText = lockButton.contentDescription
-        fitButton.isEnabled = !pdf.isSizeLocked
+        updateViewportButtons()
+    }
+
+    private fun updateViewportButtons() {
+        resetButton.isEnabled = !pdf.isSizeLocked
+        resetButton.alpha = if (pdf.isSizeLocked) .35f else 1f
+        resetButton.isSelected = pdf.isDefaultView && !pdf.isTextFitted
+        fitButton.isEnabled = !pdf.isSizeLocked && !pdf.isTextFitBusy
         fitButton.alpha = if (pdf.isSizeLocked) .35f else 1f
+        fitButton.isSelected = pdf.isTextFitted
+        fitButton.stateDescription = if (pdf.isTextFitBusy) "正在计算" else if (pdf.isTextFitted) "已适应文字" else null
     }
 
     private fun toggleNavigation(mode: Int) {

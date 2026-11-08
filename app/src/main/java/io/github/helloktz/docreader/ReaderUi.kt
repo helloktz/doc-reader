@@ -11,7 +11,7 @@ import android.widget.ImageButton
 /** IconPark vectors are adapted locally; no icon font or network dependency. */
 enum class Icon(val resource: Int) {
     OPEN(R.drawable.ic_open), BACK(R.drawable.ic_back), EXPORT(R.drawable.ic_export),
-    FIT(R.drawable.ic_fit), LOCK(R.drawable.ic_lock), UNLOCK(R.drawable.ic_unlock),
+    RESET(R.drawable.ic_reset), FIT(R.drawable.ic_fit), LOCK(R.drawable.ic_lock), UNLOCK(R.drawable.ic_unlock),
     OUTLINE(R.drawable.ic_outline), PAGES(R.drawable.ic_pages), CLOSE(R.drawable.ic_close)
 }
 

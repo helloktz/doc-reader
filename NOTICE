@@ -9,7 +9,9 @@ PDF serialization uses craft-pdf and Krilla from storytold/craft-libs.
 https://github.com/storytold/craft-libs
 The pinned upstream Krilla patch is retained by native/Cargo.toml.
 
-PDF outlines are read with hayro-syntax (MIT OR Apache-2.0).
+PDF outlines and text bounds are read with hayro-syntax and hayro-interpret
+(MIT OR Apache-2.0). The interpreter's bundled font and color-profile notices
+are included in the APK's aggregated licenses.
 https://github.com/LaurenzV/hayro
 
 Toolbar icons are adapted from IconPark, by ByteDance and its contributors.

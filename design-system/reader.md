@@ -16,6 +16,12 @@ pattern did not fit this reader and was discarded.
   #216B60, mint #80D4BA, selected #E1F3ED, background #F5F8FA.
 - All toolbar icons use the same adapted IconPark family, 48-unit viewport,
   3.4-unit round strokes, rendered at 26dp inside 48dp Android touch targets.
+- Reset uses the curved return arrow; fit text uses the horizontal width arrows.
+  These are separate actions. Both respect the size lock. A spinner replaces
+  the fit glyph during analysis, and a selected border identifies the fitted view.
+- Five bottom actions keep 48dp targets with 8dp gaps. If the page badge cannot
+  fit beside them, it moves below at the lower right. Very narrow split-screen
+  windows wrap the actions too, preserving their touch targets.
 - Spacing follows 4/8dp increments. Controls use 14dp corners; the home action
   and drawer use 20dp. No decorative hero, slogans or feature descriptions.
 - Icon controls have accessibility names, native ripple and keyboard focus

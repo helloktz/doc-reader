@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
+import time
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,9 +73,12 @@ originals = {(ns, key): setting(ns, key) for ns, key in [
 old_size = re.search(r'Override size: (\d+x\d+)', adb('shell', 'wm', 'size'))
 old_density = re.search(r'Override density: (\d+)', adb('shell', 'wm', 'density'))
 old_night = adb('shell', 'cmd', 'uimode', 'night').strip().split()[-1]
-cases = [('phone-375', 750, 1500, '1.0'), ('small-large-text', 640, 1280, '2.0'),
+cases = [('phone-375', 750, 1500, '1.0'), ('small-large-text', 640, 1280, '2.0'), ('compact-window', 480, 1400, '1.0'),
          ('phone-landscape', 1500, 750, '1.0'), ('tablet-portrait', 1600, 2400, '1.0'),
          ('tablet-landscape', 2400, 1600, '1.0')]
+if len(sys.argv) > 1:
+    cases = [case for case in cases if case[0] in sys.argv[1:]]
+    assert cases, 'No matching layout cases'
 passed = []
 try:
     # Explicit file intent uses the emulator app's already-granted file access;
@@ -98,12 +103,28 @@ try:
                 break
         assert_controls(nodes, width, height)
         counter = named(nodes, '1 / 2')
-        assert bounds(counter)[0] > bounds(named(nodes, '页面预览'))[2], 'Page counter overlaps actions'
+        cx1, cy1, cx2, cy2 = bounds(counter)
+        for node in nodes:
+            if node.get('class') == 'android.widget.ImageButton':
+                x1, y1, x2, y2 = bounds(node)
+                assert cx1 >= x2 or cx2 <= x1 or cy1 >= y2 or cy2 <= y1, 'Page counter overlaps an action'
         shot('layout-' + name)
+        tap(named(nodes, '适应文字'))
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            nodes = hierarchy()
+            if named(nodes, '适应文字').get('selected') == 'true':
+                break
+        else:
+            raise AssertionError('Text fitting did not finish')
+        assert_controls(nodes, width, height)
+        if name in ['phone-375', 'small-large-text']:
+            shot('layout-text-fit-' + name)
         tap(named(nodes, '锁定尺寸'))
         nodes = hierarchy()
         assert named(nodes, '解锁尺寸').get('selected') == 'true'
-        assert named(nodes, '适应屏幕').get('enabled') == 'false'
+        assert named(nodes, '恢复默认').get('enabled') == 'false'
+        assert named(nodes, '适应文字').get('enabled') == 'false'
         tap(named(nodes, '大纲'))
         nodes = hierarchy()
         assert_controls(nodes, width, height)
@@ -130,6 +151,6 @@ finally:
     adb('shell', 'cmd', 'uimode', 'night', old_night)
     launch()
 
-(OUT / 'layout-results.json').write_text(json.dumps({'result': 'PASS', 'cases': passed,
+(OUT / ('layout-results-selected.json' if len(sys.argv) > 1 else 'layout-results.json')).write_text(json.dumps({'result': 'PASS', 'cases': passed,
     'conditions': ['system dark mode', 'system animations disabled', 'font scale up to 2.0', '48dp targets']}, indent=2), encoding='utf-8')
 print('PASS: layout and selected states; emulator settings restored', flush=True)

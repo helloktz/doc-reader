@@ -19,8 +19,9 @@ public class DocumentIntegrationTest extends Instrumentation {
         try {
             testDocxToReadablePdfAndMalformedInput();
             testSiblingExport();
+            testAdaptiveTextWidth();
             testMinimalHomeAndReading();
-            result.putString("stream", "PASS: conversion, PDF outline, sibling export/overwrite/suffix, minimal home, pinch fallback, fit width, size lock, vertical scroll, fling, activity recreation\n");
+            result.putString("stream", "PASS: conversion, PDF outline, sibling export/overwrite/suffix, global text fit, reset/cancel/empty text, minimal home, pinch fallback, size lock, vertical scroll, fling, activity recreation\n");
             finish(Activity.RESULT_OK, result);
         } catch (Throwable error) {
             result.putString("stream", android.util.Log.getStackTraceString(error));
@@ -116,6 +117,96 @@ public class DocumentIntegrationTest extends Instrumentation {
         } finally { getInstrumentation().runOnMainSync(activity::finish); }
     }
 
+    private void testAdaptiveTextWidth() throws Exception {
+        File input = new File(getTargetContext().getCacheDir(), "text-fit.pdf");
+        try (InputStream source = getContext().getAssets().open("text-fit.pdf"); OutputStream target = new FileOutputStream(input)) { source.transferTo(target); }
+        double[] edges = NativeBridge.INSTANCE.textBounds(input.getAbsolutePath(), new java.util.concurrent.atomic.AtomicBoolean());
+        assertTrue("Whole document bounds include later pages", edges[0] > .10 && edges[0] < .11 && edges[1] > .82 && edges[1] < .84);
+        MainActivity activity = (MainActivity) startActivitySync(new Intent(getTargetContext(), MainActivity.class)
+            .setAction(Intent.ACTION_VIEW).setData(android.net.Uri.fromFile(input)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        try {
+            assertNotNull(waitForText("1 / 4", 10000));
+            runOnMainSync(() -> {
+                PdfCanvas view = findCanvas(activity.getWindow().getDecorView());
+                view.fitText(); view.resetView();
+            });
+            Thread.sleep(200);
+            runOnMainSync(() -> {
+                PdfCanvas view = findCanvas(activity.getWindow().getDecorView());
+                assertTrue("Reset cancels a pending calculation", view.isDefaultView() && !view.isTextFitBusy());
+                view.fitText();
+            });
+            waitForTextFit(activity);
+            runOnMainSync(() -> {
+                PdfCanvas view = findCanvas(activity.getWindow().getDecorView());
+                assertTrue("Text fit is a distinct viewport", view.isTextFitted() && !view.isDefaultView());
+                double pad = 12 * getTargetContext().getResources().getDisplayMetrics().density;
+                double left = edges[0] * view.getWidth() * view.getZoomLevel() - view.getHorizontalOffset();
+                double right = edges[1] * view.getWidth() * view.getZoomLevel() - view.getHorizontalOffset();
+                assertTrue("Left text limit has about 2mm padding", Math.abs(left - pad) < 1);
+                assertTrue("Right text limit has about 2mm padding", Math.abs(right - (view.getWidth() - pad)) < 1);
+                float zoom = view.getZoomLevel(), x = view.getHorizontalOffset();
+                view.setSizeLocked(true); view.resetView(); view.fitText(); view.jumpToPage(2);
+                assertTrue("Lock guards both viewport actions", view.getZoomLevel() == zoom && view.getHorizontalOffset() == x);
+                assertTrue("Page navigation keeps the global fit", view.isTextFitted());
+                Bundle saved = new Bundle(); view.savePosition(saved);
+                view.setSizeLocked(false); view.resetView();
+                assertTrue("Default is still full paper width", view.isDefaultView() && !view.isTextFitted());
+                view.restorePosition(saved);
+                assertTrue("Text fit and lock restore together", view.isTextFitted() && view.isSizeLocked());
+            });
+            for (String fixture : new String[]{"text-fit-full.pdf", "text-fit-narrow.pdf"}) {
+                File special = new File(getTargetContext().getCacheDir(), fixture);
+                try (InputStream source = getContext().getAssets().open(fixture); OutputStream target = new FileOutputStream(special)) { source.transferTo(target); }
+                runOnMainSync(() -> activity.onActivityResult(10, Activity.RESULT_OK, new Intent().setData(android.net.Uri.fromFile(special))));
+                assertNotNull(waitForText("1 / 1", 10000));
+                runOnMainSync(() -> findCanvas(activity.getWindow().getDecorView()).fitText());
+                waitForTextFit(activity);
+                double[] limit = NativeBridge.INSTANCE.textBounds(special.getAbsolutePath(), new java.util.concurrent.atomic.AtomicBoolean());
+                Thread.sleep(500);
+                if (fixture.equals("text-fit-narrow.pdf")) {
+                    java.lang.reflect.Field tileField = PdfCanvas.class.getDeclaredField("tiles");
+                    tileField.setAccessible(true);
+                    runOnMainSync(() -> {
+                        try {
+                            PdfCanvas view = findCanvas(activity.getWindow().getDecorView());
+                            assertTrue("Narrow text can exceed the old zoom limit", view.getZoomLevel() > 4f);
+                            assertTrue("A sharp viewport tile must replace the enlarged page", ((android.util.LruCache<?, ?>) tileField.get(view)).size() > 0);
+                        } catch (IllegalAccessException e) { throw new AssertionError(e); }
+                    });
+                }
+                runOnMainSync(() -> {
+                    PdfCanvas view = findCanvas(activity.getWindow().getDecorView());
+                    double pad = 12 * getTargetContext().getResources().getDisplayMetrics().density;
+                    assertTrue(fixture + " left edge", Math.abs(limit[0] * view.getWidth() * view.getZoomLevel() - view.getHorizontalOffset() - pad) < 1);
+                    assertTrue(fixture + " right edge", Math.abs(limit[1] * view.getWidth() * view.getZoomLevel() - view.getHorizontalOffset() - (view.getWidth() - pad)) < 1);
+                    assertTrue(fixture + " must show its text after fitting", inkCount(view) > 30);
+                });
+            }
+            File empty = new File(getTargetContext().getCacheDir(), "no-text.pdf");
+            try (InputStream source = getContext().getAssets().open("text-fit-empty.pdf"); OutputStream target = new FileOutputStream(empty)) { source.transferTo(target); }
+            runOnMainSync(() -> activity.onActivityResult(10, Activity.RESULT_OK, new Intent().setData(android.net.Uri.fromFile(empty))));
+            assertNotNull(waitForText("1 / 1", 10000));
+            runOnMainSync(() -> findCanvas(activity.getWindow().getDecorView()).fitText());
+            waitForTextFit(activity);
+            runOnMainSync(() -> {
+                PdfCanvas view = findCanvas(activity.getWindow().getDecorView());
+                assertTrue("Image-only PDF remains readable at its original scale", view.getPageCount() == 1 && view.isDefaultView() && !view.isTextFitted());
+            });
+        } finally { runOnMainSync(activity::finish); }
+    }
+
+    private void waitForTextFit(MainActivity activity) throws Exception {
+        long deadline = android.os.SystemClock.uptimeMillis() + 15000;
+        boolean[] busy = {true};
+        while (android.os.SystemClock.uptimeMillis() < deadline) {
+            runOnMainSync(() -> busy[0] = findCanvas(activity.getWindow().getDecorView()).isTextFitBusy());
+            if (!busy[0]) return;
+            Thread.sleep(40);
+        }
+        throw new AssertionError("Text fit did not complete");
+    }
+
     private int visibleLabelCount(android.view.View view) {
         if (!view.isShown()) return 0;
         if (view instanceof android.widget.TextView)
@@ -162,7 +253,7 @@ public class DocumentIntegrationTest extends Instrumentation {
             sendTwoPointers(view, now + 500, now + 520, 5 | (1 << 8), cx, cy, 150);
             sendTwoPointers(view, now + 500, now + 550, 2, cx, cy, 350);
             sendTwoPointers(view, now + 500, now + 570, 6 | (1 << 8), cx, cy, 350);
-            view.fitWidth();
+            view.resetView();
             assertTrue("Lock preserves scale", view.getZoomLevel() == zoom);
             assertTrue("Lock prevents sideways movement", view.getHorizontalOffset() == x);
             assertTrue("Lock allows vertical reading", view.getVerticalOffset() > y);

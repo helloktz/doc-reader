@@ -29,6 +29,10 @@ for package in sorted(metadata['packages'], key=lambda p: p['name']):
             if licenses.is_dir():
                 candidates += [p for p in licenses.rglob('*') if p.is_file()]
                 break
+    if package['name'] == 'hayro-interpret':
+        candidates += [directory / 'assets/LICENSE_FOXIT', directory / 'assets/CGATS_LICENSE.txt']
+    if package['name'] == 'hayro-cmap':
+        candidates += [directory / 'assets/LICENSE.txt']
     for path in candidates:
         canonical = path.resolve()
         if canonical not in seen:
@@ -39,5 +43,5 @@ for path in [root / 'NOTICE', root / 'vendor/wordcraft/NOTICE', root / 'vendor/w
     sections.append(f'\n--- {path.name} ---\n' + path.read_text(encoding='utf-8'))
 sections.append('\nNoto Sans CJK SC: https://github.com/notofonts/noto-cjk\nFont source checkout: storytold/craft-fonts aced413\n')
 out = root / 'app/src/main/assets/open-source-licenses.txt'
-out.write_text('\n'.join(sections), encoding='utf-8')
+out.write_text('\n'.join(line.rstrip() for line in '\n'.join(sections).splitlines()) + '\n', encoding='utf-8')
 print(f'{out}: {len(used)} packages, {len(seen)} notice files')

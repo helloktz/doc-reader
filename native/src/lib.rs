@@ -1,9 +1,41 @@
 use std::{io::{Read, Write}, sync::Mutex};
-use jni::{JNIEnv, objects::{JObject, JString}, sys::jstring};
+use jni::{JNIEnv, objects::{JObject, JString}, sys::{jstring, jdoubleArray}};
 
 static CONVERSION: Mutex<()> = Mutex::new(());
 const MAX_INPUT: u64 = 64 * 1024 * 1024;
 mod outline;
+mod text_bounds;
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_helloktz_docreader_NativeBridge_textBounds(
+    mut env: JNIEnv, _this: JObject, path: JString, cancelled: JObject,
+) -> jdoubleArray {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let path: String = env.get_string(&path).map_err(|e| e.to_string())?.into();
+        text_bounds::read(&path, || env.call_method(&cancelled, "get", "()Z", &[])
+            .and_then(|v| v.z()).unwrap_or(true))
+    }));
+    match result {
+        Ok(Ok(bounds)) => {
+            let values = bounds.map_or_else(Vec::new, |v| {
+                let mut values = v.horizontal.to_vec();
+                for rows in v.vertical {
+                    values.push(rows.len() as f64);
+                    for range in rows { values.extend_from_slice(&range); }
+                }
+                values
+            });
+            env.new_double_array(values.len() as i32).and_then(|array| {
+                env.set_double_array_region(&array, 0, &values)?; Ok(array.into_raw())
+            }).unwrap_or(std::ptr::null_mut())
+        }
+        error => {
+            let message = match error { Ok(Err(e)) => e, _ => "无法读取文字边界".into() };
+            let _ = env.throw_new("java/io/IOException", message);
+            std::ptr::null_mut()
+        }
+    }
+}
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_io_github_helloktz_docreader_NativeBridge_outline(

@@ -77,9 +77,20 @@ find('打开文件')
 assert [n.get('text') for n in tree().iter('node') if n.get('text')] == ['打开文件']
 shot('release-home.png')
 pick(docx_name)
-for icon in ['适应屏幕', '锁定尺寸', '大纲', '页面预览', '导出 PDF']:
+for icon in ['恢复默认', '适应文字', '锁定尺寸', '大纲', '页面预览', '导出 PDF']:
     assert find(icon).get('class') == 'android.widget.ImageButton'
 shot('release-docx.png')
+
+tap(find('适应文字'))
+deadline = time.monotonic() + 20
+while time.monotonic() < deadline:
+    if find('适应文字').get('selected') == 'true':
+        break
+else:
+    raise AssertionError('DOCX text fit did not select the fitted viewport')
+shot('release-text-fit.png')
+tap(find('恢复默认'))
+assert find('恢复默认').get('selected') == 'true'
 
 tap(find('页面预览'))
 find('第 2 页')
@@ -95,7 +106,7 @@ find('第二页 / Page Two')
 shot('release-outline.png')
 tap(find('第二页 / Page Two'))
 find('2 / 2')
-tap(find('适应屏幕'))
+tap(find('恢复默认'))
 tap(find('锁定尺寸'))
 find('解锁尺寸')
 tap(find('解锁尺寸'))
