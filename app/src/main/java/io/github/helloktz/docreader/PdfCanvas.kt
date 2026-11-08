@@ -36,7 +36,8 @@ class PdfCanvas(context: Context) : View(context) {
     private var starts = FloatArray(0)
     private var heights = FloatArray(0)
     private var baseHeight = 0f
-    private val gap = 2f * resources.displayMetrics.density
+    private val gap = 8f * resources.displayMetrics.density
+    private val gapPaint = Paint().apply { color = context.getColor(R.color.reader_border) }
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val pageRect = RectF()
     private var pendingPosition: Bundle? = null
@@ -156,7 +157,12 @@ class PdfCanvas(context: Context) : View(context) {
         var current = 0
         for (i in starts.indices) {
             if (starts[i] <= top + height / zoom / 3) current = i
-            if (starts[i] + heights[i] < top || starts[i] > bottom) continue
+            val pageBottom = starts[i] + heights[i]
+            // Draw only between pages, keeping the paper flush with both screen edges.
+            if (i < starts.lastIndex && pageBottom < bottom && starts[i + 1] > top) {
+                canvas.drawRect(0f, pageBottom, width.toFloat(), starts[i + 1], gapPaint)
+            }
+            if (pageBottom < top || starts[i] > bottom) continue
             val rect = pageRect.apply { set(0f, starts[i], width.toFloat(), starts[i] + heights[i]) }
             val bucket = ceil(zoom * 2).toInt().coerceIn(2, 8)
             val renderKey = key(i, bucket)

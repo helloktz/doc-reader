@@ -8,6 +8,8 @@ pattern did not fit this reader and was discarded.
 - Home has one open-file button, with a decorative folder icon and one label.
 - White paper stays edge to edge at fit width. Chrome uses white surfaces and a
   cool neutral background; no side margins are added around the document.
+- Separate adjacent pages with an 8dp gray gap at fit width, scaled with the
+  document during zoom. Draw it only between pages, never as a side frame.
 - Interface text uses Android's system sans, 16sp medium for filename and action,
   15sp for headings, 12sp for page metadata. Document typography is unchanged.
 - Colors live in `res/values/colors.xml`: ink #243847, muted #566875, teal

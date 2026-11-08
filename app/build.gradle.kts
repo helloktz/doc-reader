@@ -8,8 +8,8 @@ android {
         applicationId = "io.github.helloktz.docreader"
         minSdk = 34
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.3.0"
+        versionCode = 5
+        versionName = "0.3.1"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         testInstrumentationRunner = "io.github.helloktz.docreader.DocumentIntegrationTest"
     }
