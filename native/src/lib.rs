@@ -3,6 +3,19 @@ use jni::{JNIEnv, objects::{JObject, JString}, sys::jstring};
 
 static CONVERSION: Mutex<()> = Mutex::new(());
 const MAX_INPUT: u64 = 64 * 1024 * 1024;
+mod outline;
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_helloktz_docreader_NativeBridge_outline(
+    mut env: JNIEnv, _this: JObject, path: JString,
+) -> jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let path: String = env.get_string(&path).map_err(|e| e.to_string())?.into();
+        outline::read(&path)
+    }));
+    let value = result.ok().and_then(Result::ok).unwrap_or_else(|| "[]".into());
+    env.new_string(value).map_or(std::ptr::null_mut(), |s| s.into_raw())
+}
 
 pub fn convert(input: &str, output: &str) -> Result<(), String> {
     let _guard = CONVERSION.lock().map_err(|_| "转换器需要重新启动，请重新打开应用".to_string())?;
@@ -22,7 +35,7 @@ pub fn convert(input: &str, output: &str) -> Result<(), String> {
     file.sync_all().map_err(|e| e.to_string())
 }
 
-// The only JNI boundary. Panics cannot unwind across the VM's C ABI.
+// Conversion JNI boundary. Panics cannot unwind across the VM's C ABI.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_io_github_helloktz_docreader_NativeBridge_convert(
     mut env: JNIEnv, _this: JObject, input: JString, output: JString,

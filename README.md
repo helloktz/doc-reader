@@ -6,19 +6,21 @@ Android 14+ 的离线 DOCX / PDF 阅读器。打开文件即可阅读，支持�
 
 ## 安装
 
-从本仓库的 Releases 下载 `doc-reader-v0.1.1.apk`，在 Android 手机上允许对应来源安装应用。
+从本仓库的 Releases 下载 `doc-reader-v0.2.0.apk`，在 Android 手机上允许对应来源安装应用。
 
 - 最低 Android 14 / API 34，目标 Android 16 / API 36。
 - APK 包含 ARM64（常见手机）和 x86_64（模拟器）两种架构。
 - 点击「打开文件」选择 DOCX/PDF，也可从其他应用通过「打开方式」或「分享」进入。
-- DOCX 首次打开需要本地排版转换；阅读界面右上角可以导出 PDF，保存位置由系统文件选择器决定。
-- 首页只有「打开文件」；阅读页只显示返回、文件名、页码，以及 DOCX 的导出按钮。
+- DOCX 首次打开需要本地排版转换；右上角下载图标将 PDF 写入原文件同目录，只更改后缀。重名时可以覆盖，或保留为 `文件名 (1).pdf`、`文件名 (2).pdf`。
+- 首次导出本地共享存储文件，需要在 Android 系统设置中授予文件管理访问；拒绝授权仍可阅读。系统文件选择器返回的本地存储、下载目录及 SD 卡文件可解析为原目录；不提供实际本地路径的第三方临时 URI 无法同目录导出。
+- 首页只有「打开文件」；阅读页控件使用图标，页码位于右下角。底部依次为贴边适应、尺寸锁定、大纲、页面预览。
+- 锁定保留当前缩放和横向位置，阻止横移及缩放，仍可上下阅读；解锁后可再次缩放。大纲和页面缩略图在左侧浮层中点击跳页。
 
 ## 实现范围
 
-Kotlin 编写原生界面，系统 `PdfRenderer` 按需渲染可见页面，位图缓存上限 48 MiB。Rust 通过 JNI 调用 WordCraft 的 DOCX、字体、排版和 PDF 模块；没有引入 WordCraft 的桌面界面、编辑器、MCP、旧 DOC 或其他文档格式模块。
+Kotlin 编写原生界面，系统 `PdfRenderer` 按需渲染可见页面。基础图像缓存 32 MiB，清晰度缓存 48 MiB；缩放时复用已有图像，手势结束后补充高清图像。阅读使用惯性滚动，缩略图有独立的 12 MiB 缓存。Rust 通过 JNI 调用 WordCraft 的 DOCX、字体、排版和 PDF 模块，并使用 hayro-syntax 读取 PDF 书签；没有引入 WordCraft 的桌面界面、编辑器、MCP、旧 DOC 或其他文档格式模块。
 
-DOCX 先转换为应用私有缓存中的 PDF，阅读与导出使用同一份结果。输入通过只读流读取，输出由 Android Storage Access Framework 创建。
+DOCX 先转换为应用私有缓存中的 PDF，阅读与导出使用同一份结果。输入通过只读流读取，输出通过同目录临时文件写入后替换，避免复制失败时截断已有 PDF。没有另选导出目录的入口。
 
 当前限制：
 
@@ -44,7 +46,7 @@ gh repo clone helloktz/doc-reader -- --recurse-submodules --shallow-submodules
 .\build.ps1 -Offline
 ```
 
-产物：`deliverables/doc-reader-v0.1.1.apk`。
+产物：`deliverables/doc-reader-v0.2.0.apk`。
 
 首次换机构建需要联网获取锁定的 Cargo/Gradle 依赖。脚本不安装 Android SDK/NDK。也可以通过 `-ToolsRoot` 指向另一个同结构工具目录；已有 native 库时可用 `-SkipNative`。
 
@@ -64,6 +66,6 @@ adb shell am instrument -w io.github.helloktz.docreader.test/io.github.helloktz.
 
 测试使用独立调试签名，已安装正式签名版本时，需要先卸载正式版本或使用单独的模拟器。
 
-`tests/ui_smoke.py` 验证首页只有一个打开按钮、系统选择器导入 DOCX/PDF、系统导出、滚动和输入文件不变。该脚本面向英文界面的测试模拟器，并需要 `test-output/sample.pdf`（可用 `native/examples/convert.rs` 从 `app/src/androidTest/assets/sample.docx` 生成）。
+`tests/ui_smoke.py` 验证首页只有一个打开按钮、图标工具栏、大纲/预览跳页、系统选择器导入 DOCX/PDF、首次文件权限授权、同目录导出/覆盖/尾缀，以及输入文件不变。该脚本面向英文界面的测试模拟器，并需要 `test-output/sample.pdf`（可用 `native/examples/convert.rs` 从 `app/src/androidTest/assets/sample.docx` 生成）。
 
 详细交付检查见 `VALIDATION.md`。

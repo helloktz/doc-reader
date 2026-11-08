@@ -7,7 +7,9 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.view.*
 import android.widget.*
 import java.io.File
@@ -23,8 +25,11 @@ class MainActivity : Activity() {
     private lateinit var content: FrameLayout
     private lateinit var toolbar: LinearLayout
     private lateinit var title: TextView
-    private lateinit var export: Button
-    private lateinit var back: Button
+    private lateinit var export: ImageButton
+    private lateinit var back: ImageButton
+    private lateinit var footer: LinearLayout
+    private lateinit var lockButton: ImageButton
+    private lateinit var fitButton: ImageButton
     private lateinit var pdf: PdfCanvas
     private lateinit var page: TextView
     private var currentPdf: File? = null
@@ -32,17 +37,22 @@ class MainActivity : Activity() {
     private var fromDocx = false
     private var busy = false
     private var ticket = 0
-    private var exportSource: File? = null
+    private var sourceUri: Uri? = null
+    private var exportBusy = false
+    private var exportSnapshot: File? = null
+    private var pendingExport = false
+    private var navigation: NavigationPanel? = null
     private var stopped = false
     private val docxMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
+        sourceUri = savedInstanceState?.getString("source")?.let(Uri::parse)
+        pendingExport = savedInstanceState?.getBoolean("pendingExport") ?: false
         val restored = savedInstanceState?.getString("pdf")?.let(::File)
-        if (restored?.isFile == true) showPdf(restored, savedInstanceState.getString("name") ?: "文档", savedInstanceState.getBoolean("docx"))
+        if (restored?.isFile == true) showPdf(restored, savedInstanceState.getString("name") ?: "文档", savedInstanceState.getBoolean("docx"), savedInstanceState)
         else if (!openIntent(intent)) home()
-        exportSource = savedInstanceState?.getString("exportSource")?.let(::File)
     }
 
     private fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
@@ -53,6 +63,12 @@ class MainActivity : Activity() {
         this.text = text; isAllCaps = false; textSize = 14f
         setTextColor(if (primary) Color.WHITE else green)
         background = GradientDrawable().apply { setColor(if (primary) green else Color.TRANSPARENT); cornerRadius = dp(14).toFloat() }
+        setOnClickListener { action() }
+    }
+
+    private fun icon(icon: Icon, name: String, action: () -> Unit) = ImageButton(this).apply {
+        setImageDrawable(ReaderIcon(icon, green)); setPadding(dp(12), dp(12), dp(12), dp(12))
+        setBackgroundColor(Color.TRANSPARENT); contentDescription = name; tooltipText = name
         setOnClickListener { action() }
     }
 
@@ -67,38 +83,74 @@ class MainActivity : Activity() {
         window.navigationBarColor = paper
         window.setDecorFitsSystemWindows(false)
         toolbar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(4), dp(8), dp(4)) }
-        back = button("‹ 返回") { home() }
+        back = icon(Icon.BACK, "返回") { if (navigation != null) closeNavigation() else home() }
         title = label("", 18f).apply { setSingleLine(); ellipsize = android.text.TextUtils.TruncateAt.END; setTypeface(null, Typeface.BOLD) }
-        export = button("导出 PDF") { chooseExport() }
-        toolbar.addView(back, LinearLayout.LayoutParams(dp(76), dp(48)))
+        export = icon(Icon.EXPORT, "导出 PDF") { chooseExport() }
+        toolbar.addView(back, LinearLayout.LayoutParams(dp(48), dp(48)))
         toolbar.addView(title, LinearLayout.LayoutParams(0, dp(48), 1f))
         title.gravity = Gravity.CENTER_VERTICAL
-        toolbar.addView(export, LinearLayout.LayoutParams(dp(100), dp(48)))
+        toolbar.addView(export, LinearLayout.LayoutParams(dp(48), dp(48)))
         root.addView(toolbar)
         content = FrameLayout(this)
         root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
-        page = label("", 12f).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, dp(8)) }
-        root.addView(page)
+        footer = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(4), dp(2), dp(8), dp(2)) }
+        fitButton = icon(Icon.FIT, "适应屏幕") { pdf.fitWidth() }
+        footer.addView(fitButton, LinearLayout.LayoutParams(dp(48), dp(48)))
+        lockButton = icon(Icon.UNLOCK, "锁定尺寸") { pdf.setSizeLocked(!pdf.isSizeLocked) }
+        footer.addView(lockButton, LinearLayout.LayoutParams(dp(48), dp(48)))
+        footer.addView(icon(Icon.OUTLINE, "大纲") { toggleNavigation(0) }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        footer.addView(icon(Icon.PAGES, "页面预览") { toggleNavigation(1) }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        page = label("", 12f).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL }
+        footer.addView(page, LinearLayout.LayoutParams(0, dp(48), 1f))
+        root.addView(footer)
         pdf = PdfCanvas(this).apply {
             contentDescription = "PDF 页面"
             onPageChanged = { current, total -> page.text = getString(R.string.page_position, current, total) }
             onFailure = { message -> if (!stopped) failure(message) }
+            onOutlineReady = { navigation?.refreshOutline() }
+            onLockChanged = { updateLockIcon() }
         }
         setContentView(root)
         window.insetsController?.setSystemBarsAppearance(
             WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
             WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS)
-        onBackInvokedDispatcher.registerOnBackInvokedCallback(0) { if (currentPdf != null || busy) home() else finish() }
+        onBackInvokedDispatcher.registerOnBackInvokedCallback(0) {
+            if (navigation != null) closeNavigation() else if (currentPdf != null || busy) home() else finish()
+        }
     }
+
+    private fun updateLockIcon() {
+        lockButton.setImageDrawable(ReaderIcon(if (pdf.isSizeLocked) Icon.LOCK else Icon.UNLOCK, green))
+        lockButton.setBackgroundColor(if (pdf.isSizeLocked) 0x18245c4c else Color.TRANSPARENT)
+        lockButton.isSelected = pdf.isSizeLocked
+        lockButton.contentDescription = if (pdf.isSizeLocked) "解锁尺寸" else "锁定尺寸"
+        lockButton.tooltipText = lockButton.contentDescription
+        fitButton.isEnabled = !pdf.isSizeLocked
+        fitButton.alpha = if (pdf.isSizeLocked) .35f else 1f
+    }
+
+    private fun toggleNavigation(mode: Int) {
+        val existing = navigation
+        if (existing?.mode == mode) { closeNavigation(); return }
+        if (existing != null) existing.select(mode)
+        else {
+            navigation = NavigationPanel(this, pdf) { closeNavigation() }.also {
+                content.addView(it, FrameLayout.LayoutParams(-1, -1)); it.select(mode)
+            }
+        }
+    }
+
+    private fun closeNavigation() { navigation?.let { it.close(); content.removeView(it) }; navigation = null }
 
     private fun home() {
         val previous = currentPdf
-        if (previous != null && previous != exportSource) io.execute { previous.delete() }
+        if (previous != null && previous != exportSnapshot) io.execute { previous.delete() }
+        closeNavigation(); sourceUri = null
         ticket++; busy = false; currentPdf = null
         pdf.closeDocument()
         (pdf.parent as? android.view.ViewGroup)?.removeView(pdf)
         toolbar.visibility = View.GONE
-        page.visibility = View.GONE
+        footer.visibility = View.GONE
         content.removeAllViews()
         content.addView(button("打开文件", true) { chooseFile() },
             FrameLayout.LayoutParams(dp(180), dp(52), Gravity.CENTER))
@@ -124,12 +176,13 @@ class MainActivity : Activity() {
 
     private fun loading(name: String): Int {
         val previous = currentPdf
-        if (previous != null && previous != exportSource) io.execute { previous.delete() }
+        if (previous != null && previous != exportSnapshot) io.execute { previous.delete() }
+        closeNavigation()
         ticket++; busy = true; currentPdf = null; pdf.closeDocument()
         (pdf.parent as? android.view.ViewGroup)?.removeView(pdf)
         content.removeAllViews(); back.visibility = View.VISIBLE; export.visibility = View.GONE
         title.text = name; page.text = ""
-        toolbar.visibility = View.VISIBLE; page.visibility = View.GONE
+        toolbar.visibility = View.VISIBLE; footer.visibility = View.GONE
         val loading = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         loading.addView(ProgressBar(this), LinearLayout.LayoutParams(dp(40), dp(40)))
         loading.addView(label("正在打开…", 15f).apply { setPadding(0, dp(18), 0, 0) })
@@ -138,6 +191,8 @@ class MainActivity : Activity() {
     }
 
     private fun openUri(uri: Uri) {
+        sourceUri = uri
+        try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
         val id = loading("打开文件")
         io.execute {
             try {
@@ -180,47 +235,86 @@ class MainActivity : Activity() {
         } catch (e: Exception) { output.delete(); throw e }
     }
 
-    private fun showPdf(file: File, name: String, docx: Boolean) {
+    private fun showPdf(file: File, name: String, docx: Boolean, position: Bundle? = null) {
         currentPdf = file; currentName = name; fromDocx = docx; busy = true
         title.text = name; back.visibility = View.VISIBLE; export.visibility = View.GONE
-        toolbar.visibility = View.VISIBLE; page.visibility = View.VISIBLE
+        toolbar.visibility = View.VISIBLE; footer.visibility = View.VISIBLE
         content.removeAllViews()
         content.addView(pdf, FrameLayout.LayoutParams(-1, -1))
         val id = ticket
         pdf.open(file) {
             if (id == ticket && !stopped) {
                 busy = false; export.visibility = if (docx) View.VISIBLE else View.GONE
+                pdf.restorePosition(position); updateLockIcon()
+                if (pendingExport && Environment.isExternalStorageManager()) { pendingExport = false; chooseExport() }
             }
         }
     }
 
     private fun chooseExport() {
-        exportSource = currentPdf ?: return
-        startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE); type = "application/pdf"
-            putExtra(Intent.EXTRA_TITLE, currentName.substringBeforeLast('.', currentName) + ".pdf")
-        }, 11)
+        val snapshot = currentPdf ?: return
+        val uri = sourceUri ?: run { exportError("请重新打开原 DOCX 后导出"); return }
+        if (exportBusy || busy || !fromDocx) return
+        val privateFile = uri.scheme == "file" && uri.path?.startsWith(applicationInfo.dataDir + File.separator) == true
+        if (!privateFile && !Environment.isExternalStorageManager()) {
+            pendingExport = true
+            startActivityForResult(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")), 12)
+            return
+        }
+        exportBusy = true; exportSnapshot = snapshot; export.isEnabled = false
+        io.execute {
+            try {
+                val source = SameFolderExport.sourceFile(this, uri) ?: throw IOException("此文件来源未提供本地目录，无法导出")
+                require(source.isFile) { "原文件已移动或无法访问" }
+                val target = SameFolderExport.destination(source)
+                require(target.canonicalFile != source.canonicalFile) { "无法覆盖原文件，请检查 DOCX 后缀名" }
+                val exists = target.exists()
+                runOnUiThread {
+                    if (stopped) return@runOnUiThread
+                    if (exists) AlertDialog.Builder(this).setTitle(target.name)
+                        .setPositiveButton("覆盖") { _, _ -> writeExport(snapshot, source, true) }
+                        .setNegativeButton("都保存") { _, _ -> writeExport(snapshot, source, false) }
+                        .setNeutralButton("取消") { _, _ -> exportFinished() }
+                        .setOnCancelListener { exportFinished() }.show()
+                    else writeExport(snapshot, source, false)
+                }
+            } catch (e: Exception) { runOnUiThread { if (!stopped) { exportFinished(); exportError(e.message) } } }
+        }
+    }
+
+    private fun writeExport(snapshot: File, source: File, overwrite: Boolean) {
+        io.execute {
+            try {
+                SameFolderExport.save(snapshot, source, overwrite)
+                runOnUiThread { if (!stopped) { exportFinished(); Toast.makeText(this, "PDF 已保存", Toast.LENGTH_SHORT).show() } }
+            } catch (e: Exception) { runOnUiThread { if (!stopped) { exportFinished(); exportError(e.message) } } }
+        }
+    }
+
+    private fun exportFinished() {
+        val snapshot = exportSnapshot; exportSnapshot = null
+        if (snapshot != null && snapshot != currentPdf) io.execute { snapshot.delete() }
+        exportBusy = false; export.isEnabled = true
+    }
+    private fun exportError(message: String?) {
+        AlertDialog.Builder(this).setTitle("导出失败").setMessage(message).setPositiveButton("知道了", null).show()
     }
 
     @Deprecated("Framework activity result bridge")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (resultCode != RESULT_OK) { if (requestCode == 11) exportSource = null; return }
+        if (requestCode == 12) {
+            if (pendingExport) {
+                pendingExport = false
+                if (Environment.isExternalStorageManager()) {
+                    if (busy) pendingExport = true else chooseExport()
+                } else exportError("未获得文件访问权限")
+            }
+            return
+        }
+        if (resultCode != RESULT_OK) return
         val uri = data?.data ?: return
         if (requestCode == 10) openUri(uri)
-        if (requestCode == 11) {
-            val source = exportSource ?: return
-            exportSource = null
-            io.execute {
-                try {
-                    contentResolver.openOutputStream(uri, "wt")?.use { target -> source.inputStream().use { it.copyTo(target) } }
-                        ?: throw IOException("无法写入所选位置")
-                    runOnUiThread { if (!stopped) Toast.makeText(this, "PDF 已保存", Toast.LENGTH_LONG).show() }
-                } catch (e: Exception) {
-                    runOnUiThread { if (!stopped) AlertDialog.Builder(this).setTitle("导出失败").setMessage(e.message).setPositiveButton("知道了", null).show() }
-                }
-            }
-        }
     }
 
     private fun failure(message: String) {
@@ -232,7 +326,9 @@ class MainActivity : Activity() {
         super.onSaveInstanceState(outState)
         currentPdf?.let { outState.putString("pdf", it.absolutePath) }
         outState.putString("name", currentName); outState.putBoolean("docx", fromDocx)
-        exportSource?.let { outState.putString("exportSource", it.absolutePath) }
+        sourceUri?.let { outState.putString("source", it.toString()) }
+        outState.putBoolean("pendingExport", pendingExport)
+        pdf.savePosition(outState)
     }
 
     override fun onDestroy() {

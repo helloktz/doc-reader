@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <application android:theme="@style/AppTheme" android:label="文阅" android:icon="@drawable/ic_app"
         android:allowBackup="false" android:dataExtractionRules="@xml/backup_rules" android:supportsRtl="true" android:usesCleartextTraffic="false">
         <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden">

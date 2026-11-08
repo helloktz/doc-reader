@@ -1,4 +1,4 @@
-"""Exercise system document picking/export against an already installed build."""
+"""End-to-end release checks with real file picker and same-folder export."""
 import json
 import os
 from pathlib import Path
@@ -11,7 +11,8 @@ root = Path(__file__).resolve().parents[1]
 output = root / 'test-output'
 output.mkdir(exist_ok=True)
 adb = str(Path(os.environ.get('ANDROID_HOME', r'D:\Developer\tools\AndroidSDK')) / 'platform-tools/adb.exe')
-export_name = f'doc-reader-ui-{int(time.time())}.pdf'
+stem = f'doc-reader-ui-{int(time.time())}'
+docx_name = stem + '.docx'
 
 def run(*args):
     return subprocess.check_output([adb, *args], encoding='utf-8', errors='replace')
@@ -24,14 +25,16 @@ def tree():
         time.sleep(.3)
     raise AssertionError('Could not obtain a fresh UI hierarchy')
 
-def find(text, timeout=15, cls=None):
+def find(text, timeout=15, resource=None):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         for node in tree().iter('node'):
-            if ''.join(node.get('text', '').split()) == ''.join(text.split()) and (not cls or node.get('class') == cls):
+            if resource and not node.get('resource-id', '').endswith(resource):
+                continue
+            if any(''.join(node.get(key, '').split()) == ''.join(text.split()) for key in ['text', 'content-desc']):
                 return node
         time.sleep(.2)
-    raise AssertionError(f'UI text not found: {text}')
+    raise AssertionError(f'UI item not found: {text}')
 
 def tap(node):
     x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.get('bounds')))
@@ -41,50 +44,90 @@ def shot(name):
     run('shell', 'screencap', '-p', '/sdcard/doc-reader-shot.png')
     run('pull', '/sdcard/doc-reader-shot.png', str(output / name))
 
-run('push', str(root / 'app/src/androidTest/assets/sample.docx'), '/sdcard/Download/reading-test.docx')
+def pick(name):
+    tap(find('打开文件'))
+    # Search avoids depending on the number of previous test files in Downloads.
+    tap(find('Search'))
+    edit = next(n for n in tree().iter('node') if n.get('resource-id', '').endswith('search_src_text'))
+    tap(edit)
+    run('shell', 'input', 'text', name)
+    run('shell', 'input', 'keyevent', '66')
+    tap(find(name, resource='android:id/title'))
+    find('返回')
+    find('1 / 2', timeout=30)
+
+def fetch_pdf(name, local):
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        try:
+            run('pull', '/sdcard/Download/' + name, str(local))
+            data = local.read_bytes()
+            if data.startswith(b'%PDF-') and b'%%EOF' in data[-128:]:
+                return
+        except subprocess.CalledProcessError:
+            pass
+        time.sleep(.3)
+    raise AssertionError('Export did not produce a complete sibling PDF: ' + name)
+
+run('push', str(root / 'app/src/androidTest/assets/sample.docx'), '/sdcard/Download/' + docx_name)
 run('push', str(output / 'sample.pdf'), '/sdcard/Download/reading-test.pdf')
-run('shell', 'am', 'force-stop', 'io.github.helloktz.docreader')
-run('shell', 'am', 'start', '-n', 'io.github.helloktz.docreader/.MainActivity')
+run('shell', 'am', 'start', '-S', '-W', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER',
+    '-f', '0x10008000', '-n', 'io.github.helloktz.docreader/.MainActivity')
 find('打开文件')
+assert [n.get('text') for n in tree().iter('node') if n.get('text')] == ['打开文件']
 shot('release-home.png')
-visible_text = [n.get('text') for n in tree().iter('node') if n.get('text')]
-assert visible_text == ['打开文件'], visible_text
-tap(find('打开文件'))
-tap(find('reading-test.docx'))
-tap(find('导出 PDF', timeout=30))
-field = next(n for n in tree().iter('node') if n.get('class') == 'android.widget.EditText')
-tap(field)
-run('shell', 'input', 'keyevent', '123')
-run('shell', 'input', 'keyevent', *(['67'] * 50))
-run('shell', 'input', 'text', export_name)
-tap(find('SAVE'))
-# Repeated test runs may ask to replace the same generated destination.
-try:
-    export = find('导出 PDF', timeout=5)
-except AssertionError:
-    tap(find('REPLACE'))
-    export = find('导出 PDF')
-time.sleep(.5)
-run('pull', '/sdcard/Download/' + export_name, str(output / 'exported-final.pdf'))
-assert (output / 'exported-final.pdf').read_bytes().startswith(b'%PDF-')
-tap(find('‹ 返回'))
-tap(find('打开文件'))
-tap(find('reading-test.pdf'))
-find('reading-test.pdf')
-assert not any(n.get('text') == '导出 PDF' for n in tree().iter('node'))
-shot('release-pdf.png')
-tap(find('‹ 返回'))
-tap(find('打开文件'))
-tap(find('reading-test.docx'))
-find('导出 PDF', timeout=30)
-find('reading-test.docx')
-time.sleep(.5)
+pick(docx_name)
+for icon in ['适应屏幕', '锁定尺寸', '大纲', '页面预览', '导出 PDF']:
+    assert find(icon).get('class') == 'android.widget.ImageButton'
 shot('release-docx.png')
-run('shell', 'input', 'swipe', '540', '1900', '540', '500', '500')
+
+tap(find('页面预览'))
+find('第 2 页')
+time.sleep(.5)
+shot('release-pages.png')
+tap(find('第 2 页'))
 find('2 / 2')
-tap(find('‹ 返回'))
-run('pull', '/sdcard/Download/reading-test.docx', str(output / 'original-after.docx'))
+tap(find('大纲'))
+tap(find('打开，即阅读。'))
+find('1 / 2')
+tap(find('大纲'))
+find('第二页 / Page Two')
+shot('release-outline.png')
+tap(find('第二页 / Page Two'))
+find('2 / 2')
+tap(find('适应屏幕'))
+tap(find('锁定尺寸'))
+find('解锁尺寸')
+tap(find('解锁尺寸'))
+
+tap(find('导出 PDF'))
+state = tree()
+switches = [n for n in state.iter('node') if n.get('package') == 'com.android.settings' and n.get('checkable') == 'true']
+if switches:
+    if switches[0].get('checked') != 'true':
+        tap(switches[0])
+    run('shell', 'input', 'keyevent', '4')
+find('返回')
+fetch_pdf(stem + '.pdf', output / 'exported-final.pdf')
+
+# Exercise overwrite with a known non-PDF sentinel.
+sentinel = output / 'export-sentinel.pdf'
+sentinel.write_bytes(b'old target')
+run('push', str(sentinel), '/sdcard/Download/' + stem + '.pdf')
+tap(find('导出 PDF'))
+tap(find('覆盖'))
+fetch_pdf(stem + '.pdf', output / 'overwritten-final.pdf')
+tap(find('导出 PDF'))
+tap(find('都保存'))
+fetch_pdf(stem + ' (1).pdf', output / 'both-final.pdf')
+tap(find('返回'))
+pick('reading-test.pdf')
+assert not any(n.get('content-desc') == '导出 PDF' for n in tree().iter('node'))
+shot('release-pdf.png')
+tap(find('返回'))
+run('pull', '/sdcard/Download/' + docx_name, str(output / 'original-after.docx'))
 assert (output / 'original-after.docx').read_bytes() == (root / 'app/src/androidTest/assets/sample.docx').read_bytes()
-report = {'result': 'PASS', 'checks': ['minimal home', 'SAF PDF export', 'SAF PDF open', 'SAF DOCX open', 'page scrolling', 'source unchanged']}
+report = {'result': 'PASS', 'checks': ['minimal home', 'icon toolbar', 'outline jump', 'thumbnail jump',
+    'same-directory export', 'overwrite', 'keep both suffix', 'PDF open', 'source unchanged']}
 (output / 'release-ui-test.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
 print(report)

@@ -9,6 +9,9 @@ PDF serialization uses craft-pdf and Krilla from storytold/craft-libs.
 https://github.com/storytold/craft-libs
 The pinned upstream Krilla patch is retained by native/Cargo.toml.
 
+PDF outlines are read with hayro-syntax (MIT OR Apache-2.0).
+https://github.com/LaurenzV/hayro
+
 Noto Sans CJK SC Regular is copied unmodified from craft-fonts aced413.
 Font upstream: https://github.com/notofonts/noto-cjk
 License: SIL Open Font License 1.1, native/mobile-fonts/OFL.txt.

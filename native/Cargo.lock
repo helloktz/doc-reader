@@ -316,7 +316,9 @@ dependencies = [
 name = "doc-reader-native"
 version = "0.1.0"
 dependencies = [
+ "hayro-syntax",
  "jni",
+ "serde_json",
  "wordcraft-docx",
  "wordcraft-fonts",
  "wordcraft-pdf",
@@ -473,6 +475,40 @@ name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+
+[[package]]
+name = "hayro-ccitt"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2866f0d976e76497480b853d5e258dab6e4b89ecfe991124e08f15dfa8fd03ad"
+
+[[package]]
+name = "hayro-jbig2"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "000e025850f4592ddcaee85640db70704151f2bafd43b6f431aa5b6a2c6a35a9"
+dependencies = [
+ "hayro-ccitt",
+]
+
+[[package]]
+name = "hayro-jpeg2000"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c75ab947623ef4ccaa7acf0579edf7cbb5a73838e3839a7be73335e522f433a1"
+
+[[package]]
+name = "hayro-syntax"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0edeafd70aa2db743de8ede8637d07ec87db05efe69cde371d03f1b185fcef27"
+dependencies = [
+ "hayro-jbig2",
+ "hayro-jpeg2000",
+ "rustc-hash",
+ "smallvec",
+ "zune-jpeg",
+]
 
 [[package]]
 name = "hmac"

@@ -13,6 +13,8 @@ wordcraft-docx = { path = "../vendor/wordcraft/crates/docx" }
 wordcraft-fonts = { path = "../vendor/wordcraft/crates/fonts" }
 wordcraft-pdf = { path = "../vendor/wordcraft/crates/pdf" }
 jni = "0.21.1"
+hayro-syntax = { version = "=0.7.2", default-features = false, features = ["std"] }
+serde_json = "1"
 
 [patch.crates-io]
 krilla = { git = "https://github.com/storytold/craft-libs", rev = "c5a1cbfb5f9049f9270955caffb5bee5997aebf7" }
